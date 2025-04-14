@@ -19,4 +19,4 @@ RUN apt-get update && \
 EXPOSE 53/tcp 53/udp 8053/tcp
 
 # Start named in foreground with DNS API
-CMD bash -c "named -g -c /etc/bind/named.conf & python3 /usr/local/bin/dns_api.py"
+CMD ["bash", "-c", "named -g -c /etc/bind/named.conf & python3 /usr/local/bin/dns_api.py"]
