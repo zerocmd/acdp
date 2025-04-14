@@ -1,0 +1,66 @@
+services:
+  # DNS Server
+  bind:
+    build: 
+      context: ./dns
+      dockerfile: DockerFile
+    ports:
+      - "53:53/udp"
+      - "53:53/tcp"
+      - "8053:8053"
+    volumes:
+      - bind_data:/var/cache/bind
+      - bind_logs:/var/log/named
+    networks:
+      - agent_network
+    
+  # Central Registry
+  registry:
+    build: 
+      context: ./registry
+      dockerfile: DockerFile
+    ports:
+      - "5001:5000"
+    environment:
+      - FLASK_ENV=development
+    depends_on:
+      - bind
+    networks:
+      - agent_network
+    volumes:
+      - ./registry/static:/app/static
+      - ./registry/templates:/app/templates
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  agent22:
+    build: 
+      context: ./agent
+      dockerfile: DockerFile
+    ports:
+      - "8022:8000"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - AGENT_ID=agent22.agents.local
+      - AGENT_NAME=Agent Epsilon
+      - AGENT_CAPABILITIES=security,threat_detection,attack_patterns,response,log_analysis
+      - AGENT_DESCRIPTION=AI assistant specializing in security analysis and threat detection
+      - AGENT_PORT=8000
+      - AGENT_HOSTNAME=agent22.agents.local
+      - REGISTRY_URL=http://registry:5000
+      - DNS_API_URL=http://bind:8053
+    depends_on:
+      - registry
+      - bind
+    networks:
+      - agent_network
+networks:
+  agent_network:
+    driver: bridge
+
+volumes:
+  bind_data:
+  bind_logs:

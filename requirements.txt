@@ -1,0 +1,8 @@
+flask==2.3.3
+gunicorn==21.2.0
+requests==2.31.0
+httpx>=0.25.0
+dnspython==2.5.0
+anthropic
+anyio==3.7.1
+colorama==0.4.6

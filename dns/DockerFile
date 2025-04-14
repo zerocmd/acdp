@@ -1,0 +1,22 @@
+FROM ubuntu/bind9:latest
+
+# Copy configuration files
+COPY named.conf /etc/bind/
+COPY zones/ /etc/bind/zones/
+COPY scripts/ /usr/local/bin/
+
+# Make scripts executable
+RUN chmod +x /usr/local/bin/update_zone.sh
+RUN chmod +x /usr/local/bin/dns_api.py
+
+# Install required packages for dynamic DNS updates
+RUN apt-get update && \
+    apt-get install -y dnsutils python3 && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Expose DNS ports
+EXPOSE 53/tcp 53/udp 8053/tcp
+
+# Start named in foreground with DNS API
+CMD bash -c "named -g -c /etc/bind/named.conf & python3 /usr/local/bin/dns_api.py"

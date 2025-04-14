@@ -1,0 +1,24 @@
+$TTL 300
+@       IN      SOA     ns.agents.local. admin.agents.local. (
+                        2025030901      ; Serial
+                        300             ; Refresh
+                        60              ; Retry
+                        604800          ; Expire
+                        300 )           ; Negative Cache TTL
+
+; Name servers
+@       IN      NS      ns.agents.local.
+ns      IN      A       127.0.0.1
+
+; Default A record for the domain
+@       IN      A       127.0.0.1
+
+; Registry service
+registry IN      A       127.0.0.1
+_registry._tcp   IN      SRV     0 0 5000 registry.agents.local.
+_registry._tcp   IN      TXT     "ver=1.0" "desc=Agent Registry Service"
+
+; Example agent records (will be added dynamically)
+; agent1.agents.local.        IN      A       127.0.0.1
+; _llm-agent._tcp.agent1.agents.local. IN SRV 0 0 8000 agent1.agents.local.
+; _llm-agent._tcp.agent1.agents.local. IN TXT "ver=1.0" "caps=chat,summarize" "desc=Example Agent"

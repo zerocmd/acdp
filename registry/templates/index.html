@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Registry</title>
+    <link rel="stylesheet" href="/static/css/dracula.css">
+</head>
+
+<body>
+    <header>
+        <h1>Agent Communication & Discovery Network</h1>
+    </header>
+
+    <nav>
+        <ul>
+            <li><a href="#" class="active" id="nav-dashboard">Dashboard</a></li>
+            <li><a href="#" id="nav-memory">Shared Memory</a></li>
+            <li><a href="#" id="nav-chat">Agent Chat</a></li>
+        </ul>
+    </nav>
+
+    <div class="container">
+        <div id="dashboard-view">
+            <h2>Active Agents</h2>
+            <div class="agents-grid">
+                {% for id, agent in agents.items() %}
+                <div class="agent-card" data-agent-id="{{ id }}">
+                    <div class="agent-header">
+                        <h3 class="agent-name">{{ agent.name }}</h3>
+                        <span
+                            class="agent-status {% if (now - agent.last_update) < 120 %}status-online{% else %}status-offline{% endif %}">
+                            {% if (now - agent.last_update) < 120 %}Online{% else %}Offline{% endif %} </span>
+                    </div>
+                    <div class="agent-body">
+                        <p class="agent-description">{{ agent.description }}</p>
+                        <div class="agent-meta">
+                            <span class="meta-label">ID:</span>
+                            <span class="meta-value">{{ id }}</span>
+
+                            <span class="meta-label">Last Seen:</span>
+                            <span class="meta-value">{{ agent.last_update|timestamp }}</span>
+
+                            <span class="meta-label">Model:</span>
+                            <span class="meta-value">{{ agent.model_info.type }}</span>
+                        </div>
+                        <div class="agent-capabilities">
+                            <div class="meta-label">Capabilities:</div>
+                            <div class="capability-list">
+                                {% for capability in agent.capabilities %}
+                                <span class="capability-tag">{{ capability }}</span>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <div class="agent-actions">
+                            <button class="btn btn-secondary view-details-btn" data-agent-id="{{ id }}">Details</button>
+                            <button class="btn btn-primary chat-btn" data-agent-id="{{ id }}">Chat</button>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div id="agent-details-view" style="display: none;">
+            <div class="agent-details">
+                <div class="agent-details-header">
+                    <h2 id="detail-agent-name"></h2>
+                </div>
+                <div class="agent-details-body">
+                    <div class="tabs">
+                        <div class="tab active" data-tab="info">Information</div>
+                        <div class="tab" data-tab="peers">Peers</div>
+                    </div>
+
+                    <div class="tab-content active" data-tab="info">
+                        <!-- Agent information will be loaded here -->
+                    </div>
+
+                    <div class="tab-content" data-tab="peers">
+                        <!-- Agent peers will be loaded here -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="agent-actions" style="text-align: center; margin-top: 1rem;">
+                <button class="btn btn-secondary" id="back-to-dashboard">Back to Dashboard</button>
+            </div>
+        </div>
+
+        <!-- Shared Memory and Chat views will be created dynamically -->
+    </div>
+
+    <script src="/static/js/main.js"></script>
+</body>
+
+</html>

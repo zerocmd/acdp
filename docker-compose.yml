@@ -1,0 +1,160 @@
+
+services:
+  # DNS Server
+  bind:
+    build: 
+      context: ./dns
+      dockerfile: DockerFile
+    ports:
+      - "53:53/udp"
+      - "53:53/tcp"
+      - "8053:8053"
+    volumes:
+      - bind_data:/var/cache/bind
+      - bind_logs:/var/log/named
+    networks:
+      - agent_network
+    
+  # Central Registry
+  registry:
+    build: 
+      context: ./registry
+      dockerfile: DockerFile
+    ports:
+      - "5001:5000"
+    environment:
+      - FLASK_ENV=development
+    depends_on:
+      - bind
+    networks:
+      - agent_network
+    volumes:
+      - ./registry/static:/app/static
+      - ./registry/templates:/app/templates
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Agent 1
+  agent1:
+    build: 
+      context: ./agent
+      dockerfile: DockerFile
+    ports:
+      - "8001:8000"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - AGENT_ID=agent1.agents.local
+      - AGENT_NAME=Agent Alpha
+      - AGENT_CAPABILITIES=chat,summarization,translation,orchestration
+      - AGENT_DESCRIPTION=General AI assistant with agent orchestration capability
+      - AGENT_PORT=8000
+      - AGENT_HOSTNAME=agent1.agents.local
+      - REGISTRY_URL=http://registry:5000
+      - DNS_API_URL=http://bind:8053
+    depends_on:
+      - registry
+      - bind
+    networks:
+      - agent_network
+
+  # Agent 2
+  agent2:
+    build: 
+      context: ./agent
+      dockerfile: DockerFile
+    ports:
+      - "8002:8000"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - AGENT_ID=agent2.agents.local
+      - AGENT_NAME=Agent Beta
+      - AGENT_CAPABILITIES=data_analysis,statistics,visualization
+      - AGENT_DESCRIPTION=AI assistant specializing in data analysis, statistics, and visualization
+      - AGENT_PORT=8000
+      - AGENT_HOSTNAME=agent2.agents.local
+      - REGISTRY_URL=http://registry:5000
+      - DNS_API_URL=http://bind:8053
+    depends_on:
+      - registry
+      - bind
+    networks:
+      - agent_network
+  
+  # Agent 0
+  agent0:
+    build: 
+      context: ./agent
+      dockerfile: DockerFile
+    ports:
+      - "8003:8000"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - AGENT_ID=agent0.agents.local
+      - AGENT_NAME=Agent Zero
+      - AGENT_CAPABILITIES=machine_learning,log_analysis,security_operations
+      - AGENT_DESCRIPTION=Specialized AI assistant for security investigation
+      - AGENT_PORT=8000
+      - AGENT_HOSTNAME=agent0.agents.local
+      - REGISTRY_URL=http://registry:5000
+      - DNS_API_URL=http://bind:8053
+    depends_on:
+      - registry
+      - bind
+    networks:
+      - agent_network
+
+  # Agent 4
+  agent4:
+    build: 
+      context: ./agent
+      dockerfile: DockerFile
+    ports:
+      - "8004:8000"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - AGENT_ID=agent4.agents.local
+      - AGENT_NAME=Agent Gamma
+      - AGENT_CAPABILITIES=cybersecurity,incident_response,log_analysis
+      - AGENT_DESCRIPTION=AI assistant specializing in cybersecurity and incident response
+      - AGENT_PORT=8000
+      - AGENT_HOSTNAME=agent4.agents.local
+      - REGISTRY_URL=http://registry:5000
+      - DNS_API_URL=http://bind:8053
+    depends_on:
+      - registry
+      - bind
+    networks:
+      - agent_network
+  
+  # Agent 3
+  agent3:
+    build: 
+      context: ./agent
+      dockerfile: DockerFile
+    ports:
+      - "8005:8000"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - AGENT_ID=agent3.agents.local
+      - AGENT_NAME=Agent Delta
+      - AGENT_CAPABILITIES=security,threat_detection,attack_patterns,response,log_analysis
+      - AGENT_DESCRIPTION=AI assistant specializing in security analysis and threat detection
+      - AGENT_PORT=8000
+      - AGENT_HOSTNAME=agent3.agents.local
+      - REGISTRY_URL=http://registry:5000
+      - DNS_API_URL=http://bind:8053
+    depends_on:
+      - registry
+      - bind
+    networks:
+      - agent_network
+networks:
+  agent_network:
+    driver: bridge
+
+volumes:
+  bind_data:
+  bind_logs:
