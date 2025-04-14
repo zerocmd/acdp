@@ -1,6 +1,6 @@
 # Agent Communication, Discovery & Memory Protocol PoC
 
-This proof of concept implements a basic version of the Agent Communication & Discovery Protocol, allowing AI agents to register, discover, communicate with each other, and share memory. This implementation is only provided as an example to visualize the approaches outlined in the document. It's not intended to be comprehensive and does not cover any of the security related options outlined.
+This proof of concept implements a basic version of the Agent Communication & Discovery Protocol, allowing AI agents to register, discover, communicate with each other, and share memory. It uses a cybersecurity scenario (see agent capabilities) and so long as you phrase your communication as a question, they will collaborate. This implementation is only provided as an example to visualize the approaches outlined in the document. It's not intended to be comprehensive and does not cover any of the security related options outlined at all.
 
 ## Components
 
@@ -13,7 +13,7 @@ This proof of concept implements a basic version of the Agent Communication & Di
 You will require a BIND server as a Docker image: [BIND 9](https://hub.docker.com/r/ubuntu/bind9/)
 
 1. Clone this repository
-2. Set your Anthropic API key in an environment variable:
+2. The PoC uses Anthropic's Sonnet. Set your Anthropic API key in an environment variable:
 
    ```bash
    export ANTHROPIC_API_KEY=your_api_key_here
