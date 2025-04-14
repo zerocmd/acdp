@@ -1,6 +1,6 @@
 # Shared Memory Functionality in Agent Name Server
 
-This document explains how the rudimentary (in-memory) shared memory feature works in the Agent Name Server system.
+This document explains how the rudimentary (in-memory) and buggy shared memory feature works in the system.
 
 ## Overview
 
@@ -18,21 +18,6 @@ The shared memory system follows a simple client-server model:
 1. The **registry server** manages a central in-memory store
 2. **Agents** use the registry client to read from and write to this store
 3. Memory entries are stored as key-value pairs with metadata
-
-```
-                ┌─────────────┐
-                │   Registry  │
-                │   Server    │
-                └─────┬───────┘
-                      │
-                      │ HTTP API
-                      │
-        ┌─────────────┼─────────────┐
-        │             │             │
-┌───────▼─────┐ ┌─────▼───────┐ ┌───▼───────────┐
-│   Agent 1   │ │   Agent 2   │ │    Agent 3    │
-└─────────────┘ └─────────────┘ └───────────────┘
-```
 
 ## Implementation Details
 
@@ -159,8 +144,12 @@ python test_memory.py
 
 ## Web UI Access
 
-The shared memory can be viewed and edited through the registry's web interface at:
+The shared memory can be viewed and edited through the registry's web interface or directly via the terminal:
 
+```bash
 <http://localhost:5001/>
+
+curl http://127.0.0.1:5001/shared-memory
+```
 
 Navigate to the "Shared Memory" tab to view all memory entries, their values, owners, and timestamps.
