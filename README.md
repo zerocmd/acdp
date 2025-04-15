@@ -1,6 +1,6 @@
 # Agent Communication & Discovery Protocol PoC
 
-This proof of concept implements a basic version of the Agent Communication & Discovery Protocol, allowing AI agents to register, discover, communicate with each other, and share memory. It uses a cybersecurity scenario (see agent capabilities) and so long as you phrase your communication as a question, they will collaborate. This implementation is only provided as an example to visualize the approaches outlined in the document. It's not intended to be comprehensive and does not cover any of the security related options outlined at all.
+This proof of concept implements a basic version of the [Agent Communication & Discovery Protocol](https://github.com/zerocmd/acdp/blob/c743887b500489e582764cf047cbd833af3d6c32/ACDP.md), allowing AI agents to register, discover, communicate with each other, and share memory. It uses a cybersecurity scenario (see agent capabilities) and so long as you phrase your communication as a question, they will collaborate. This implementation is only provided as an example to visualize the approaches outlined in the document. It's not intended to be comprehensive and does not cover any of the security related options outlined at all.
 
 ## Components
 
