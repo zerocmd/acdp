@@ -14,6 +14,7 @@ Summary: >-
 # The Agent Communication and Discovery Protocol Specification
 
 *[This document was created with the assistance of Anthropic's Claude LLMs.]*
+
 *[This document is in draft]*
 
 **Overview:** This specification defines an Agent Communication and Discovery Protocol that allows Large Language Model (LLM) agents to advertise themselves via DNS and discover peers in a hybrid decentralized manner. It supports any type of LLM-based agent, leveraging standard DNS records (TXT, SRV) for discovery and metadata, augmented by a central registry for dynamic updates and search. All agent-to-agent and agent-to-registry communication uses HTTPS for security and interoperability. The protocol defines how agents register their endpoints, discover each other (both through DNS and peer-to-peer awareness), describe their capabilities in a structured way, and establish secure communications. The following sections outline the core aspects of the protocol: Discovery Mechanism, Peer Awareness, Metadata Schema, Security Considerations, and Communication Protocol implementation guidelines.
