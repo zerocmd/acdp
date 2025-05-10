@@ -353,7 +353,7 @@ In summary, the metadata schema provides a common language for agents to adverti
 
 Based on the protocol documentation, here are several ways to publish and make discoverable multiple central registries:
 
-### 1. DNS-Based Multi-Registry Discovery
+### DNS-Based Multi-Registry Discovery
 
 #### Using DNS SRV Records
 
@@ -381,7 +381,7 @@ _registry._tcp.example.com.     IN TXT "type=global" "org=ExampleCorp" "scope=pu
 _registry._tcp.hr.example.com.  IN TXT "type=department" "org=ExampleCorp" "scope=internal" "focus=hr-agents"
 ```
 
-### 2. Hierarchical Registry Structure (Meta-Registry)
+### Hierarchical Registry Structure (Meta-Registry)
 
 #### Meta-Registry Approach
 
@@ -569,7 +569,7 @@ sequenceDiagram
     end
 ```
 
-### 3. Federated Registry Architecture
+### Federated Registry Architecture
 
 #### Registry Federation Protocol
 
@@ -602,8 +602,6 @@ Implement a protocol where registries can query each other:
   }
 }
 ```
-
-I'll create sequence and flow diagrams for the Hierarchical Registry Structure (Meta-Registry) and Federated Registry Architecture.
 
 ### Sequence Diagram: Federated Registry Discovery
 
@@ -860,7 +858,7 @@ These diagrams illustrate:
 
 Both approaches can be used together, with meta-registries providing centralized discovery points while federation enables direct registry-to-registry collaboration.
 
-### 4. Well-Known URI Pattern
+### Well-Known URI Pattern
 
 Use the `.well-known` URI pattern (RFC 8615) for registry discovery:
 
@@ -889,7 +887,7 @@ Each organization publishes registry information at this endpoint:
 }
 ```
 
-### 5. Industry-Specific Registry Networks
+### Industry-Specific Registry Networks
 
 #### Sector-Based Discovery
 
@@ -906,7 +904,7 @@ _registry._tcp.finance.global.     IN SRV  10 0 443 registry.fintech-consortium.
 _registry._tcp.gov.us.            IN SRV  10 0 443 registry.usgov.internal.
 ```
 
-### 6. Peer-to-Peer Registry Discovery
+### Peer-to-Peer Registry Discovery
 
 #### Registry Gossip Protocol
 
@@ -922,7 +920,7 @@ class RegistryPeerManager:
             self.merge_registry_knowledge(their_registries)
 ```
 
-### 7. Hybrid Discovery Implementation
+### Hybrid Discovery Implementation
 
 #### Multi-Method Discovery Service
 
@@ -952,7 +950,7 @@ class RegistryDiscoveryService:
         return filtered
 ```
 
-### 8. Registry Authentication and Trust
+### Registry Authentication and Trust
 
 #### Trust Relationships Between Registries
 
@@ -987,7 +985,7 @@ Establish trust chains between registries:
 7. **Use split DNS** for internal vs. external registry visibility
 8. **Sign registry records** with DNSSEC where possible
 
-This multi-registry architecture enables organizations to maintain their own registries while still participating in a broader ecosystem of AI agents, with appropriate security and access controls at each level.
+This architecture enables organizations to maintain their own registries while still participating in a broader ecosystem of AI agents, with appropriate security and access controls at each level.
 
 ## Communication Protocol
 
