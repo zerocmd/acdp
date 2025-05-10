@@ -173,3 +173,10 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 CLAUDE.md
+.clinerules
+memory-bank/activeContext.md
+memory-bank/productContext.md
+memory-bank/progress.md
+memory-bank/projectbrief.md
+memory-bank/systemPatterns.md
+memory-bank/techContext.md

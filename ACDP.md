@@ -349,6 +349,646 @@ The metadata exchange format is primarily JSON over HTTPS. However, a compact su
 
 In summary, the metadata schema provides a common language for agents to advertise what they can do, in a machine-readable form. It aligns with DNS records (for basic info) and expands via JSON over HTTP for rich detail. This structured description is key for interoperability: it lets a requesting agent decide which peer is suitable for a task, and how to call it.
 
+## Support for Multiple Registries
+
+Based on the protocol documentation, here are several ways to publish and make discoverable multiple central registries:
+
+### 1. DNS-Based Multi-Registry Discovery
+
+#### Using DNS SRV Records
+
+Organizations can publish their registry endpoints using DNS SRV records following the same pattern as agent discovery:
+
+```text
+; Global registry service for example.com
+_registry._tcp.example.com.     3600 IN SRV  10 0 443 registry.example.com.
+
+; Department-specific registries
+_registry._tcp.hr.example.com.  3600 IN SRV  10 0 443 hr-registry.example.com.
+_registry._tcp.it.example.com.  3600 IN SRV  10 0 443 it-registry.example.com.
+
+; Regional registries
+_registry._tcp.us.example.com.  3600 IN SRV  10 0 443 us-registry.example.com.
+_registry._tcp.eu.example.com.  3600 IN SRV  10 0 443 eu-registry.example.com.
+```
+
+#### Registry Metadata in TXT Records
+
+Include metadata about each registry's focus or capabilities:
+
+```text
+_registry._tcp.example.com.     IN TXT "type=global" "org=ExampleCorp" "scope=public"
+_registry._tcp.hr.example.com.  IN TXT "type=department" "org=ExampleCorp" "scope=internal" "focus=hr-agents"
+```
+
+### 2. Hierarchical Registry Structure (Meta-Registry)
+
+#### Meta-Registry Approach
+
+Create a "registry of registries" that maintains a directory of all available registries:
+
+```json
+{
+  "name": "GlobalRegistryIndex",
+  "type": "meta-registry",
+  "endpoints": [
+    {
+      "url": "https://meta-registry.global/api/v1",
+      "transport": "https"
+    }
+  ],
+  "registries": [
+    {
+      "id": "registry.example.com",
+      "organization": "ExampleCorp",
+      "type": "organization",
+      "endpoint": "https://registry.example.com",
+      "scope": "public",
+      "capabilities": ["agent-discovery", "tool-discovery"]
+    },
+    {
+      "id": "registry.healthcare-alliance.org",
+      "organization": "Healthcare Alliance",
+      "type": "industry",
+      "endpoint": "https://registry.healthcare-alliance.org",
+      "scope": "members-only",
+      "sector": "healthcare"
+    }
+  ]
+}
+```
+
+### Sequence Diagram: Meta-Registry Discovery Process
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant MetaRegistry as Meta-Registry
+    participant OrgRegistry as Organization Registry
+    participant DeptRegistry as Department Registry
+    participant Cache as Client Cache
+    
+    Note over Client: Client needs to discover registries
+    
+    Client->>Cache: Check cached registry list
+    alt Cache miss or expired
+        Client->>MetaRegistry: GET /registries
+        MetaRegistry-->>Client: List of all known registries
+        
+        Note over Client: Parse registry list and metadata
+        
+        Client->>Cache: Update registry cache
+        Cache-->>Client: Cache updated
+    else Cache hit
+        Cache-->>Client: Return cached registry list
+    end
+    
+    Note over Client: Client selects relevant registries
+    
+    Client->>OrgRegistry: GET /registry/info
+    OrgRegistry-->>Client: Organization registry metadata
+    
+    Client->>DeptRegistry: GET /registry/info
+    DeptRegistry-->>Client: Department registry metadata
+    
+    Note over Client: Client can now query specific registries for agents
+    
+    Client->>OrgRegistry: GET /agents?capability=translation
+    OrgRegistry-->>Client: List of translation agents
+    
+    Client->>DeptRegistry: GET /agents?department=hr
+    DeptRegistry-->>Client: List of HR department agents
+```
+
+### Flow Diagram: Meta-Registry Architecture
+
+```mermaid
+graph TD
+    subgraph "Global Level"
+        MR[Meta-Registry]
+        MR_DB[(Registry Database)]
+        MR --> MR_DB
+    end
+    
+    subgraph "Organization Level"
+        OR1[Org Registry 1]
+        OR2[Org Registry 2]
+        OR3[Org Registry 3]
+        
+        OR1_DB[(Org 1 Agents)]
+        OR2_DB[(Org 2 Agents)]
+        OR3_DB[(Org 3 Agents)]
+        
+        OR1 --> OR1_DB
+        OR2 --> OR2_DB
+        OR3 --> OR3_DB
+    end
+    
+    subgraph "Department Level"
+        DR1[HR Registry]
+        DR2[IT Registry]
+        DR3[Finance Registry]
+        
+        DR1_DB[(HR Agents)]
+        DR2_DB[(IT Agents)]
+        DR3_DB[(Finance Agents)]
+        
+        DR1 --> DR1_DB
+        DR2 --> DR2_DB
+        DR3 --> DR3_DB
+    end
+    
+    subgraph "Clients"
+        C1[Client 1]
+        C2[Client 2]
+        C3[Client 3]
+    end
+    
+    %% Registration flows
+    OR1 -- "register" --> MR
+    OR2 -- "register" --> MR
+    OR3 -- "register" --> MR
+    
+    DR1 -- "register" --> OR1
+    DR2 -- "register" --> OR1
+    DR3 -- "register" --> OR2
+    
+    %% Discovery flows
+    C1 -- "discover registries" --> MR
+    C2 -- "discover registries" --> MR
+    C3 -- "discover registries" --> MR
+    
+    C1 -- "query agents" --> OR1
+    C1 -- "query agents" --> DR1
+    C2 -- "query agents" --> OR2
+    C3 -- "query agents" --> OR3
+    
+    style MR fill:#f9f,stroke:#333,stroke-width:4px
+    style OR1 fill:#bbf,stroke:#333,stroke-width:2px
+    style OR2 fill:#bbf,stroke:#333,stroke-width:2px
+    style OR3 fill:#bbf,stroke:#333,stroke-width:2px
+    style DR1 fill:#bfb,stroke:#333,stroke-width:2px
+    style DR2 fill:#bfb,stroke:#333,stroke-width:2px
+    style DR3 fill:#bfb,stroke:#333,stroke-width:2px
+```
+
+### Sequence Diagram: Registry Registration to Meta-Registry
+
+```mermaid
+sequenceDiagram
+    participant NewRegistry as New Registry
+    participant MetaRegistry as Meta-Registry
+    participant Validator as Validation Service
+    participant DB as Meta-Registry DB
+    
+    Note over NewRegistry: New registry comes online
+    
+    NewRegistry->>MetaRegistry: POST /registry/register
+    Note right of NewRegistry: {<br/>  "id": "registry.neworg.com",<br/>  "organization": "NewOrg",<br/>  "endpoint": "https://...",<br/>  "capabilities": [...],<br/>  "auth": {...}<br/>}
+    
+    MetaRegistry->>Validator: Validate registration request
+    Validator->>Validator: Check required fields
+    Validator->>Validator: Validate endpoint accessibility
+    Validator->>Validator: Verify authentication credentials
+    Validator-->>MetaRegistry: Validation result
+    
+    alt Validation successful
+        MetaRegistry->>DB: Store registry metadata
+        DB-->>MetaRegistry: Registration stored
+        
+        MetaRegistry->>NewRegistry: Registration successful
+        Note right of MetaRegistry: {<br/>  "status": "registered",<br/>  "registry_id": "...",<br/>  "refresh_token": "..."<br/>}
+        
+        loop Periodic heartbeat
+            NewRegistry->>MetaRegistry: PUT /registry/heartbeat
+            MetaRegistry-->>NewRegistry: Heartbeat acknowledged
+        end
+    else Validation failed
+        MetaRegistry-->>NewRegistry: Registration failed
+        Note right of MetaRegistry: {<br/>  "error": "validation_failed",<br/>  "details": [...]<br/>}
+    end
+```
+
+### 3. Federated Registry Architecture
+
+#### Registry Federation Protocol
+
+Registries can federate with each other, sharing agent information based on agreements:
+
+```text
+# Registry A configuration
+federation:
+  peers:
+    - id: "registry.partner.com"
+      url: "https://registry.partner.com/federation"
+      auth: "mutual-tls"
+      sync_interval: 3600
+      filters:
+        - capabilities: ["public-apis"]
+        - exclude: ["internal-tools"]
+```
+
+#### Cross-Registry Discovery Protocol
+
+Implement a protocol where registries can query each other:
+
+```json
+{
+  "method": "cross_registry_search",
+  "params": {
+    "query": "agents with capability:translation",
+    "requester": "registry.example.com",
+    "auth_token": "..."
+  }
+}
+```
+
+I'll create sequence and flow diagrams for the Hierarchical Registry Structure (Meta-Registry) and Federated Registry Architecture.
+
+### Sequence Diagram: Federated Registry Discovery
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant HomeRegistry as Home Registry
+    participant FederatedRegistry1 as Federated Registry 1
+    participant FederatedRegistry2 as Federated Registry 2
+    participant FedCache as Federation Cache
+    
+    Note over Client: Client queries for agents
+    
+    Client->>HomeRegistry: GET /agents?capability=medical-diagnosis
+    
+    HomeRegistry->>HomeRegistry: Search local agents
+    
+    HomeRegistry->>FedCache: Check federation cache
+    
+    alt Cache miss or stale
+        par Query federated registries
+            HomeRegistry->>FederatedRegistry1: GET /federation/search
+            Note right of HomeRegistry: {<br/>  "query": "capability:medical-diagnosis",<br/>  "requester": "registry.home.com",<br/>  "federation_token": "..."<br/>}
+            FederatedRegistry1-->>HomeRegistry: Federated results
+            
+            HomeRegistry->>FederatedRegistry2: GET /federation/search
+            FederatedRegistry2-->>HomeRegistry: Federated results
+        end
+        
+        HomeRegistry->>FedCache: Update federation cache
+    else Cache hit
+        FedCache-->>HomeRegistry: Cached federated results
+    end
+    
+    HomeRegistry->>HomeRegistry: Merge and filter results
+    HomeRegistry-->>Client: Combined results from all registries
+```
+
+### Flow Diagram: Federation Network
+
+```mermaid
+graph TD
+    subgraph "Healthcare Federation"
+        HR1[Hospital Registry 1]
+        HR2[Hospital Registry 2]
+        HR3[Research Registry]
+        HF[Healthcare Federation Hub]
+        
+        HR1 <--> HF
+        HR2 <--> HF
+        HR3 <--> HF
+        HR1 <--> HR2
+        HR2 <--> HR3
+        HR1 <--> HR3
+    end
+    
+    subgraph "Finance Federation"
+        FR1[Bank Registry 1]
+        FR2[Bank Registry 2]
+        FR3[Insurance Registry]
+        FF[Finance Federation Hub]
+        
+        FR1 <--> FF
+        FR2 <--> FF
+        FR3 <--> FF
+        FR1 <--> FR2
+        FR2 <--> FR3
+    end
+    
+    subgraph "Cross-Federation"
+        HF <--> FF
+    end
+    
+    subgraph "Agents"
+        A1[Medical AI Agent]
+        A2[Diagnostic Agent]
+        A3[Trading Agent]
+        A4[Risk Agent]
+        
+        A1 --> HR1
+        A2 --> HR3
+        A3 --> FR1
+        A4 --> FR3
+    end
+    
+    subgraph "Clients"
+        C1[Hospital Client]
+        C2[Bank Client]
+        C3[Research Client]
+        
+        C1 --> HR1
+        C1 --> HF
+        C2 --> FR1
+        C2 --> FF
+        C3 --> HR3
+        C3 --> HF
+    end
+    
+    style HF fill:#f9f,stroke:#333,stroke-width:3px
+    style FF fill:#f9f,stroke:#333,stroke-width:3px
+    style HR1 fill:#bbf,stroke:#333,stroke-width:2px
+    style HR2 fill:#bbf,stroke:#333,stroke-width:2px
+    style HR3 fill:#bbf,stroke:#333,stroke-width:2px
+    style FR1 fill:#bfb,stroke:#333,stroke-width:2px
+    style FR2 fill:#bfb,stroke:#333,stroke-width:2px
+    style FR3 fill:#bfb,stroke:#333,stroke-width:2px
+```
+
+### Sequence Diagram: Federation Synchronization
+
+```mermaid
+sequenceDiagram
+    participant Registry1
+    participant Registry2
+    participant Registry3
+    participant SyncManager as Sync Manager
+    
+    Note over Registry1: Periodic federation sync
+    
+    loop Every sync_interval
+        Registry1->>SyncManager: Initiate federation sync
+        
+        SyncManager->>Registry2: GET /federation/changes?since=timestamp
+        Registry2-->>SyncManager: Changed agents list
+        
+        SyncManager->>Registry3: GET /federation/changes?since=timestamp
+        Registry3-->>SyncManager: Changed agents list
+        
+        SyncManager->>SyncManager: Apply federation filters
+        SyncManager->>SyncManager: Resolve conflicts
+        
+        SyncManager->>Registry1: Update local federation cache
+        
+        Note over Registry1: Notify about changes
+        Registry1->>Registry2: POST /federation/notify
+        Note right of Registry1: {<br/>  "registry": "registry1.com",<br/>  "changes": [...],<br/>  "timestamp": "..."<br/>}
+        
+        Registry1->>Registry3: POST /federation/notify
+    end
+    
+    Note over Registry1,Registry3: Federation stays synchronized
+```
+
+### Sequence Diagram: Cross-Registry Agent Discovery
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant LocalRegistry as Local Registry
+    participant FedAuth as Federation Auth Service
+    participant RemoteRegistry1 as Remote Registry 1
+    participant RemoteRegistry2 as Remote Registry 2
+    
+    Client->>LocalRegistry: GET /discover?query=capability:nlp
+    
+    LocalRegistry->>LocalRegistry: Search local agents
+    
+    LocalRegistry->>FedAuth: Get federation tokens
+    FedAuth-->>LocalRegistry: Federation access tokens
+    
+    par Federated search
+        LocalRegistry->>RemoteRegistry1: POST /federation/discover
+        Note right of LocalRegistry: {<br/>  "query": "capability:nlp",<br/>  "federation_token": "...",<br/>  "filters": {...}<br/>}
+        RemoteRegistry1->>RemoteRegistry1: Validate federation token
+        RemoteRegistry1->>RemoteRegistry1: Apply access policies
+        RemoteRegistry1-->>LocalRegistry: Filtered results
+        
+        LocalRegistry->>RemoteRegistry2: POST /federation/discover
+        RemoteRegistry2->>RemoteRegistry2: Validate federation token
+        RemoteRegistry2->>RemoteRegistry2: Apply access policies
+        RemoteRegistry2-->>LocalRegistry: Filtered results
+    end
+    
+    LocalRegistry->>LocalRegistry: Merge results
+    LocalRegistry->>LocalRegistry: Apply local policies
+    LocalRegistry-->>Client: Combined discovery results
+    
+    Note over Client: Client receives agents from<br/>multiple federated registries
+```
+
+### Flow Diagram: Federation Trust Model
+
+```mermaid
+graph TD
+    subgraph "Trust Establishment"
+        CA[Certificate Authority]
+        TR1[Registry 1 Certificate]
+        TR2[Registry 2 Certificate]
+        TR3[Registry 3 Certificate]
+        
+        CA --> TR1
+        CA --> TR2
+        CA --> TR3
+    end
+    
+    subgraph "Federation Agreement"
+        FA[Federation Agreement]
+        P1[Access Policies]
+        P2[Data Sharing Rules]
+        P3[Security Requirements]
+        
+        FA --> P1
+        FA --> P2
+        FA --> P3
+    end
+    
+    subgraph "Registry Federation"
+        R1[Registry 1]
+        R2[Registry 2]
+        R3[Registry 3]
+        
+        R1 -- "Mutual TLS" --> R2
+        R2 -- "Mutual TLS" --> R3
+        R1 -- "Mutual TLS" --> R3
+        
+        R1 --> P1
+        R2 --> P1
+        R3 --> P1
+    end
+    
+    subgraph "Federation Operations"
+        OP1[Agent Discovery]
+        OP2[Capability Search]
+        OP3[Metadata Sync]
+        OP4[Trust Verification]
+        
+        R1 --> OP1
+        R1 --> OP2
+        R1 --> OP3
+        R1 --> OP4
+        
+        R2 --> OP1
+        R2 --> OP2
+        R2 --> OP3
+        R2 --> OP4
+    end
+    
+    TR1 --> R1
+    TR2 --> R2
+    TR3 --> R3
+    
+    style CA fill:#f9f,stroke:#333,stroke-width:3px
+    style FA fill:#bbf,stroke:#333,stroke-width:3px
+    style R1 fill:#bfb,stroke:#333,stroke-width:2px
+    style R2 fill:#bfb,stroke:#333,stroke-width:2px
+    style R3 fill:#bfb,stroke:#333,stroke-width:2px
+```
+
+These diagrams illustrate:
+
+1. **Meta-Registry Architecture**: A hierarchical system where a central meta-registry maintains a directory of all registries, allowing clients to discover and access multiple registries through a single entry point.
+
+2. **Federated Registry Architecture**: A peer-to-peer system where registries establish trust relationships and share agent information based on federation agreements, enabling cross-organization discovery while maintaining autonomy and security.
+
+Both approaches can be used together, with meta-registries providing centralized discovery points while federation enables direct registry-to-registry collaboration.
+
+### 4. Well-Known URI Pattern
+
+Use the `.well-known` URI pattern (RFC 8615) for registry discovery:
+
+```text
+https://example.com/.well-known/agent-registry
+https://healthcare.org/.well-known/agent-registry
+```
+
+Each organization publishes registry information at this endpoint:
+
+```json
+{
+  "registries": [
+    {
+      "name": "Main Corporate Registry",
+      "endpoint": "https://registry.example.com",
+      "api_version": "1.0",
+      "capabilities": ["agent-discovery", "mcp-discovery"]
+    },
+    {
+      "name": "Research Division Registry",
+      "endpoint": "https://research.example.com/registry",
+      "access": "internal-only"
+    }
+  ]
+}
+```
+
+### 5. Industry-Specific Registry Networks
+
+#### Sector-Based Discovery
+
+Different sectors can maintain their own registry networks:
+
+```text
+; Healthcare sector registries
+_registry._tcp.healthcare.global.  IN SRV  10 0 443 registry.healthcare-alliance.org.
+
+; Financial sector registries  
+_registry._tcp.finance.global.     IN SRV  10 0 443 registry.fintech-consortium.org.
+
+; Government registries
+_registry._tcp.gov.us.            IN SRV  10 0 443 registry.usgov.internal.
+```
+
+### 6. Peer-to-Peer Registry Discovery
+
+#### Registry Gossip Protocol
+
+Similar to agent peer discovery, registries can discover each other:
+
+```python
+class RegistryPeerManager:
+    def gossip_registries(self):
+        # Exchange knowledge of other registries
+        known_registries = self.get_known_registries()
+        for peer in self.peer_registries:
+            their_registries = peer.exchange_registry_list(known_registries)
+            self.merge_registry_knowledge(their_registries)
+```
+
+### 7. Hybrid Discovery Implementation
+
+#### Multi-Method Discovery Service
+
+Implement a discovery service that combines multiple approaches:
+
+```python
+class RegistryDiscoveryService:
+    def discover_registries(self, context=None):
+        registries = []
+        
+        # 1. Check DNS for registries
+        dns_registries = self.dns_discovery(context.domain)
+        registries.extend(dns_registries)
+        
+        # 2. Query meta-registry if configured
+        if self.meta_registry_url:
+            meta_registries = self.query_meta_registry(context)
+            registries.extend(meta_registries)
+        
+        # 3. Check well-known URIs
+        wellknown_registries = self.check_wellknown_uris(context.domains)
+        registries.extend(wellknown_registries)
+        
+        # 4. Apply filters and access controls
+        filtered = self.filter_by_access(registries, context.credentials)
+        
+        return filtered
+```
+
+### 8. Registry Authentication and Trust
+
+#### Trust Relationships Between Registries
+
+Establish trust chains between registries:
+
+```json
+{
+  "trust_relationships": [
+    {
+      "registry": "registry.healthcare.org",
+      "trust_level": "full",
+      "certificate_fingerprint": "SHA256:...",
+      "allowed_operations": ["read", "federate"]
+    },
+    {
+      "registry": "registry.partner.com",
+      "trust_level": "limited",
+      "allowed_operations": ["read-public"]
+    }
+  ]
+}
+```
+
+### Implementation Recommendations
+
+1. **Start with DNS-based discovery** as the foundation - it's decentralized and uses existing infrastructure
+2. **Implement a meta-registry** for organizations needing centralized registry management
+3. **Use well-known URIs** as a fallback discovery mechanism
+4. **Enable federation** between trusted registries for cross-organization collaboration
+5. **Maintain backward compatibility** - support multiple discovery methods
+6. **Implement caching** to reduce discovery overhead
+7. **Use split DNS** for internal vs. external registry visibility
+8. **Sign registry records** with DNSSEC where possible
+
+This multi-registry architecture enables organizations to maintain their own registries while still participating in a broader ecosystem of AI agents, with appropriate security and access controls at each level.
+
 ## Communication Protocol
 
 All interactions in the agent network use HTTPS as the transport protocol, ensuring compatibility with web standards and ease of use through firewalls/proxies. The communication protocol defines how agents talk to the central registry and to each other to exchange the discovery information (and by extension, how they might invoke capabilities, though task invocation specifics can vary). Key elements include the use of RESTful APIs, standard methods (GET, POST, etc.), and structured data (JSON) for requests and responses.
