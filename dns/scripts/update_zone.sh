@@ -8,6 +8,9 @@ PORT=$3
 CAPABILITIES=$4
 DESCRIPTION=$5
 IP_ADDRESS=$6
+A2A_CARD_PATH=$7     # ACDP 1.1: path of the A2A Agent Card, e.g. /.well-known/agent-card.json
+PROTOCOLS=$8         # ACDP 1.1: e.g. a2a/0.3,rest-json
+VERSION=${9:-1.0}    # ACDP protocol version
 
 # Default IP if not provided
 if [ -z "$IP_ADDRESS" ]; then
@@ -22,9 +25,18 @@ fi
 
 # Ensure required parameters are provided
 if [ -z "$DOMAIN" ] || [ -z "$HOST" ] || [ -z "$PORT" ]; then
-    echo "Usage: $0 <domain> <host> <port> [capabilities] [description] [ip_address]"
+    echo "Usage: $0 <domain> <host> <port> [capabilities] [description] [ip_address] [a2a_card_path] [protocols] [version]"
     echo "Example: $0 agent1.agents.local agent1.local 8000 \"chat,summarize\" \"My Agent\" 192.168.1.100"
     exit 1
+fi
+
+# Inputs are validated by dns_api.py; the TXT strings below must never contain quotes.
+TXT="\"ver=$VERSION\" \"caps=$CAPABILITIES\" \"desc=$DESCRIPTION\""
+if [ -n "$PROTOCOLS" ]; then
+    TXT="$TXT \"proto=$PROTOCOLS\""
+fi
+if [ -n "$A2A_CARD_PATH" ]; then
+    TXT="$TXT \"a2a=$A2A_CARD_PATH\""
 fi
 
 # Create a temporary file for nsupdate commands
@@ -38,7 +50,7 @@ update delete _llm-agent._tcp.$DOMAIN SRV
 update delete _llm-agent._tcp.$DOMAIN TXT
 update add $DOMAIN 300 A $IP_ADDRESS
 update add _llm-agent._tcp.$DOMAIN 300 SRV 0 0 $PORT ${HOST%.}.
-update add _llm-agent._tcp.$DOMAIN 300 TXT "ver=1.0" "caps=$CAPABILITIES" "desc=$DESCRIPTION"
+update add _llm-agent._tcp.$DOMAIN 300 TXT $TXT
 send
 NSUPDATE_EOF
 

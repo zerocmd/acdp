@@ -5,15 +5,93 @@ This uses Python's built-in HTTP server instead of Flask.
 """
 
 import http.server
+import ipaddress
 import socketserver
 import json
+import re
 import subprocess
 import logging
 import os
-import urllib.parse
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+ZONE = os.environ.get("AGENT_ZONE", "agents.local")
+_LABEL = r"[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+DOMAIN_RE = re.compile(rf"^({_LABEL}\.)+{re.escape(ZONE)}$")
+HOST_RE = re.compile(rf"^{_LABEL}(\.{_LABEL})*\.?$")
+CAPS_RE = re.compile(r"^[A-Za-z0-9_,-]{0,240}$")
+PROTO_RE = re.compile(r"^[A-Za-z0-9._/,+-]{0,120}$")
+PATH_RE = re.compile(r"^(/[A-Za-z0-9._~-]+)*/?$")
+VERSION_RE = re.compile(r"^\d+(\.\d+){0,2}$")
+
+
+class ValidationError(ValueError):
+    pass
+
+
+def validate_update(data):
+    """Validate and normalise a DNS update request.
+
+    Every value ends up inside an nsupdate script, where a quote or newline would let
+    a caller inject arbitrary zone updates, so values are checked against strict
+    patterns and the free-text description is stripped of quotes, backslashes and
+    control characters.
+    """
+    if not isinstance(data, dict):
+        raise ValidationError("Expected a JSON object")
+    for field in ("domain", "host", "port"):
+        if field not in data:
+            raise ValidationError(f"Missing required field: {field}")
+
+    domain = str(data["domain"]).lower()
+    if not DOMAIN_RE.fullmatch(domain):
+        raise ValidationError(f"domain must be a name under {ZONE}")
+    host = str(data["host"])
+    if not HOST_RE.fullmatch(host):
+        raise ValidationError("host must be a DNS name")
+    try:
+        port = int(data["port"])
+    except (TypeError, ValueError):
+        raise ValidationError("port must be an integer")
+    if not 1 <= port <= 65535:
+        raise ValidationError("port out of range")
+
+    capabilities = str(data.get("capabilities", ""))
+    if not CAPS_RE.fullmatch(capabilities):
+        raise ValidationError("capabilities may contain only letters, digits, _ , -")
+    protocols = str(data.get("protocols", ""))
+    if not PROTO_RE.fullmatch(protocols):
+        raise ValidationError("protocols contains invalid characters")
+    a2a_path = str(data.get("a2a", ""))
+    if a2a_path and not PATH_RE.fullmatch(a2a_path):
+        raise ValidationError("a2a must be a URL path such as /.well-known/agent-card.json")
+    version = str(data.get("version", "1.0"))
+    if not VERSION_RE.fullmatch(version):
+        raise ValidationError("version must look like 1.1")
+
+    description = "".join(
+        ch for ch in str(data.get("description", "")) if ch.isprintable() and ch not in '"\\'
+    )[:200]
+
+    ip_address = str(data.get("ip_address", ""))
+    if ip_address:
+        try:
+            ipaddress.ip_address(ip_address)
+        except ValueError:
+            raise ValidationError("ip_address is not a valid IP address")
+
+    return {
+        "domain": domain,
+        "host": host,
+        "port": str(port),
+        "capabilities": capabilities,
+        "description": description,
+        "ip_address": ip_address,
+        "a2a": a2a_path,
+        "protocols": protocols,
+        "version": version,
+    }
 
 
 class DNSUpdateHandler(http.server.BaseHTTPRequestHandler):
@@ -24,36 +102,22 @@ class DNSUpdateHandler(http.server.BaseHTTPRequestHandler):
             post_data = self.rfile.read(content_length)
 
             try:
-                data = json.loads(post_data)
+                data = validate_update(json.loads(post_data))
 
-                # Validate required fields
-                required_fields = ["domain", "host", "port"]
-                for field in required_fields:
-                    if field not in data:
-                        self._send_error(400, f"Missing required field: {field}")
-                        return
-
-                # Extract data
-                domain = data["domain"]
-                host = data["host"]
-                port = str(data["port"])
-                capabilities = data.get("capabilities", "")
-                description = data.get("description", "")
-                ip_address = data.get("ip_address", "")
-
-                # Call the update script
+                # Call the update script (argument vector, no shell)
                 try:
                     cmd = [
                         "/usr/local/bin/update_zone.sh",
-                        domain,
-                        host,
-                        port,
-                        capabilities,
-                        description,
+                        data["domain"],
+                        data["host"],
+                        data["port"],
+                        data["capabilities"],
+                        data["description"],
+                        data["ip_address"],
+                        data["a2a"],
+                        data["protocols"],
+                        data["version"],
                     ]
-
-                    if ip_address:
-                        cmd.append(ip_address)
 
                     result = subprocess.run(
                         cmd, capture_output=True, text=True, check=True
@@ -77,6 +141,8 @@ class DNSUpdateHandler(http.server.BaseHTTPRequestHandler):
 
             except json.JSONDecodeError:
                 self._send_error(400, "Invalid JSON data")
+            except ValidationError as e:
+                self._send_error(400, str(e))
         else:
             self._send_error(404, "Not found")
 

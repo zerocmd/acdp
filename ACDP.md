@@ -7,8 +7,10 @@ Summary: >-
   structured capability sharing, 4) Security Framework with multiple protection
   layers, and 5) Communication Protocol over HTTPS with RESTful APIs. Recent
   updates added private registry deployment, split DNS configuration, Model
-  Context Protocol (MCP) integration, and improved security for sensitive
-  environments.
+  Context Protocol (MCP) integration, improved security for sensitive
+  environments, and (ACDP 1.1) an A2A interoperability profile that uses
+  the Agent2Agent protocol for task invocation while ACDP remains the
+  discovery layer.
 ---
 
 # The Agent Communication and Discovery Protocol Specification
@@ -286,7 +288,7 @@ Each agent exposes a structured metadata description of its identity and capabil
 
 - Optionally, other interfaces can be listed, like interfaces.grpc or interfaces.websocket if the agent supports gRPC or streaming via WebSocket on certain endpoints. Each interface entry would include necessary connection info (host, port if non-standard, protocol version, etc.). In most cases, the SRV record already gives host/port for HTTPS, so the metadata mainly adds path or protocol specifics.
 
-- **protocols (array of strings):** The communication protocols or standards the agent speaks for higher-level interactions. Since HTTPS is mandatory for transport, this refers to things like message schemas or agent interaction protocols. For instance, an agent might support an agent specific message format) or simply "rest-json" for a basic RESTful JSON API. This helps ensure compatibility – two agents can find if they have a common language or protocol for task execution.
+- **protocols (array of strings):** The communication protocols or standards the agent speaks for higher-level interactions. Since HTTPS is mandatory for transport, this refers to things like message schemas or agent interaction protocols. For instance, an agent might support the A2A protocol (versioned, e.g. "a2a/0.3"; see [A2A Interoperability Profile](#a2a-interoperability-profile-acdp-11)), an agent-specific message format, or simply "rest-json" for a basic RESTful JSON API. This helps ensure compatibility – two agents can find if they have a common language or protocol for task execution.
 
 - **version (string):** The version of the agent’s software or model (not to be confused with the protocol version). For example, "1.2.0" or a date or commit hash. This can be useful for debugging or for other agents to know if they are interacting with a specific version (perhaps important if capabilities change between versions).
 
@@ -1034,7 +1036,7 @@ Optionally, the agent might also return some info about those peers (like a coup
 
 **Health Checks:** Agents might call each other’s health or ping endpoint (`GET /health` or as given by endpoints.ping). This returns a simple status (200 OK with maybe a JSON {status:"ok"} or similar). This is useful before assuming a peer is alive or before sending a task request. The central registry may also call these periodically – an agent could register a health endpoint with the registry, and the registry will hit it periodically to update the agent’s status.
 
-**Task Invocation:** If one agent wants to utilize another’s capabilities (for example, ask a question, have it summarize text, etc.), it will use a defined API endpoint on the peer. This is beyond pure discovery, but to illustrate: the metadata’s capabilities and endpoints tell what it can do and where. E.g., if capabilities includes “summarization” and the endpoints.task is /v1/summarize, then Agent A might do a `POST /v1/summarize` on Agent B, sending the content to summarize in the request body. The exact formats for tasks would depend on the capability and could be standardized separately (for instance, a JSON with prompt or data). The response would be the result of that task. The communication protocol ensures these requests are over HTTPS and possibly authenticated/authorized if required (for instance, an agent might only accept tasks from certain trusted peers or if a valid token is provided).
+**Task Invocation:** If one agent wants to utilize another’s capabilities (for example, ask a question, have it summarize text, etc.), it will use a defined API endpoint on the peer. This is beyond pure discovery, but to illustrate: the metadata’s capabilities and endpoints tell what it can do and where. E.g., if capabilities includes “summarization” and the endpoints.task is /v1/summarize, then Agent A might do a `POST /v1/summarize` on Agent B, sending the content to summarize in the request body. The exact formats for tasks would depend on the capability and could be standardized separately (for instance, a JSON with prompt or data). The response would be the result of that task. The communication protocol ensures these requests are over HTTPS and possibly authenticated/authorized if required (for instance, an agent might only accept tasks from certain trusted peers or if a valid token is provided). ACDP 1.1 standardises this step on the A2A protocol; see [Task Invocation over A2A](#task-invocation-over-a2a).
 
 **Response Formats:** For all the above interactions, JSON is the preferred format for responses (and requests when applicable). It’s human-readable and widely supported. If an agent needed to send binary data (not typical for text-based LLM tasks, but maybe for an image analysis agent sending an image), it could use Base64 in JSON or use a separate endpoint/URL (with proper content-type). However, discovery and metadata are textual JSON.
 
@@ -1185,6 +1187,164 @@ graph TD
     style agent2 fill:#9f9,stroke:#333,stroke-width:2px
     style agent3 fill:#9f9,stroke:#333,stroke-width:2px
 ```
+
+## A2A Interoperability Profile (ACDP 1.1)
+
+ACDP 1.0 defined discovery (DNS, registry, gossip) and left task invocation to agent-specific REST endpoints such as `/chat` and `/assist`. The [Agent2Agent (A2A) protocol](https://a2a-protocol.org/) now standardises that second half: a JSON **Agent Card** describing an agent, and a JSON-RPC interface (`message/send`, `message/stream`, `tasks/get`, `tasks/cancel`) for exchanging messages and long-running tasks. ACDP 1.1 adopts A2A as its invocation layer and keeps ACDP as the discovery layer.
+
+| Concern | Owned by | Mechanism |
+| --- | --- | --- |
+| Where is the agent, what can it do, is it alive? | ACDP | DNS SRV/TXT, central registry, peer gossip, heartbeats |
+| How do I describe myself to a caller? | A2A (+ ACDP extension) | Agent Card at `/.well-known/agent-card.json` |
+| How do I send work and get results? | A2A | JSON-RPC `message/send` / `message/stream`, task lifecycle |
+| Which tools/data can an agent use? | MCP | MCP servers discovered through ACDP (see next section) |
+
+A2A has no directory or peer-awareness mechanism of its own; it assumes the caller already knows an agent's base URL. ACDP supplies exactly that, so the two compose without overlap.
+
+### Metadata Additions
+
+ACDP 1.1 agents add the following to the metadata schema. All additions are optional for ACDP 1.0 consumers, which ignore unknown fields.
+
+- **acdp_version (string):** `"1.1"`.
+- **protocols:** includes a versioned A2A entry, e.g. `["a2a/0.3", "rest-json"]`. Registries match `protocol=a2a` against any `a2a/*` entry.
+- **interfaces.a2a (string):** the A2A endpoint URL (the Agent Card `url`).
+- **endpoints.agent_card / endpoints.a2a:** `/.well-known/agent-card.json` and `/`.
+- **a2a (object):** a summary so callers need not fetch the card to route:
+
+```json
+"a2a": {
+  "url": "http://agent3:8000/",
+  "card_url": "http://agent3:8000/.well-known/agent-card.json",
+  "protocol_version": "0.3.0",
+  "transport": "JSONRPC",
+  "skills": ["security", "threat_detection", "log_analysis"],
+  "auth": "none"
+}
+```
+
+### DNS TXT Keys
+
+Two keys are added to the `_llm-agent._tcp.<domain>` TXT record, and `ver` moves to `1.1`:
+
+```text
+_llm-agent._tcp.agent3.agents.local. 300 IN TXT "ver=1.1" "caps=security,threat_detection" "desc=Security analysis agent" "proto=a2a/0.3,rest-json" "a2a=/.well-known/agent-card.json"
+```
+
+- **proto** – comma-separated protocols, as in the metadata `protocols` field.
+- **a2a** – path of the Agent Card on the SRV target and port. Its presence signals that the agent accepts A2A calls; the A2A base URL is `https://<srv-target>:<srv-port>/`.
+
+A client that finds `a2a=` can go from a single DNS lookup to an A2A call without contacting the registry. Records without `a2a=` identify ACDP 1.0 agents, which are called through their REST endpoints.
+
+### Registry Additions
+
+- `POST /registerAgent` accepts an optional `agent_card` field holding the agent's A2A Agent Card as JSON. The registry validates that it has a `name` and either `url` (A2A 0.3) or `supportedInterfaces` (A2A 1.0) and stores it opaquely, so both card generations can coexist.
+- `GET /agents/<id>/card` returns the stored card (404 for ACDP 1.0 agents).
+- `GET /agents` adds filters: `skill` (A2A skill id or tag), `protocol` (prefix match), and `status` (`online` or `stale`, derived from heartbeats). `capability` also matches A2A skill ids. List responses omit the full card.
+- `GET /.well-known/agent-registry` returns the registry descriptor defined in [Well-Known URI Pattern](#well-known-uri-pattern).
+
+### Agent Card Mapping
+
+An ACDP 1.1 agent's Agent Card is derived from its ACDP metadata:
+
+| Agent Card field | Source |
+| --- | --- |
+| `name`, `description`, `version` | metadata `name`, `description`, `version` |
+| `url` | `interfaces.a2a` |
+| `provider.organization` | metadata `owner` |
+| `skills[]` | one skill per ACDP capability: `id` = capability, `tags` = [capability] |
+| `capabilities.streaming` | `true` |
+| `capabilities.extensions[]` | the ACDP extension below |
+| `securitySchemes`, `security` | the agent's A2A authentication requirement, if any |
+
+### A2A Extension v1
+
+Extension URI: `https://github.com/zerocmd/acdp/blob/main/ACDP.md#a2a-extension-v1`
+
+The extension ties an Agent Card to an ACDP identity and carries delegation state on messages. It is declared with `required: false`, so A2A clients that do not understand it can still call the agent.
+
+**Card declaration.** `capabilities.extensions[]` contains:
+
+```json
+{
+  "uri": "https://github.com/zerocmd/acdp/blob/main/ACDP.md#a2a-extension-v1",
+  "required": false,
+  "params": {
+    "acdp_version": "1.1",
+    "id": "agent3.agents.local",
+    "capabilities": ["security", "threat_detection"],
+    "dns_srv": "_llm-agent._tcp.agent3.agents.local",
+    "registry": "https://registry.example.com",
+    "endpoints": {"metadata": "/metadata", "peers": "/peers", "ping": "/health"},
+    "max_delegation_depth": 2
+  }
+}
+```
+
+An ACDP client that discovered agent id `X` and then fetched a card MUST reject the card if `params.id` is not `X`. This binds the card to the discovered identity and catches misrouted or substituted cards. It is not a substitute for TLS certificate validation or signed cards (see [Security Mapping](#security-mapping)).
+
+**Message metadata.** When an agent sends an A2A message on behalf of an upstream request, it adds the extension URI to `Message.extensions` and a delegation record to `Message.metadata`, keyed by the extension URI:
+
+```json
+"metadata": {
+  "https://github.com/zerocmd/acdp/blob/main/ACDP.md#a2a-extension-v1": {
+    "hops": 1,
+    "trace": ["agent1.agents.local"]
+  }
+}
+```
+
+- `hops` is the number of agent-to-agent hops the message has travelled. A message from a user or an external client has no record (hops 0).
+- `trace` lists the ids of the agents the request has passed through, oldest first.
+
+An agent receiving a message with `hops = h` and `trace = T` that wants to delegate to agent `Y`:
+
+1. MUST NOT delegate if `Y` is itself or appears in `T` (cycle).
+2. MUST NOT delegate if `h + 1` exceeds its `max_delegation_depth`.
+3. Otherwise sends `hops = h + 1`, `trace = T + [own id]`.
+
+Refusals are reported to the local model as a failed tool call, so the agent answers without that peer rather than failing the request. Receivers SHOULD cap `trace` length and ignore malformed records.
+
+### Task Invocation over A2A
+
+With ACDP 1.1, [Task Invocation](#communication-protocol) between agents uses A2A instead of agent-specific REST endpoints:
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant A as Agent A (Strands)
+    participant R as Registry / DNS / Peers
+    participant B as Agent B (A2A server)
+
+    User->>A: POST /chat (or A2A message/send)
+    A->>A: model decides a specialist is needed
+    A->>R: find_agents(capability)
+    R-->>A: candidates with a2a.url and skills
+    A->>B: GET /.well-known/agent-card.json
+    B-->>A: Agent Card (ACDP extension id = B)
+    A->>B: JSON-RPC message/send (metadata: hops=1, trace=[A])
+    B->>B: runs its own agent (may delegate further within the hop budget)
+    B-->>A: Task (state=completed, artifacts)
+    A-->>User: answer citing B
+```
+
+The ACDP 1.0 `/assist` endpoint remains for 1.0 peers. A 1.1 agent calls a peer over A2A when the peer advertises A2A (metadata `a2a`, `interfaces.a2a`, an `a2a/*` protocol, or the TXT `a2a=` key) and falls back to `/assist` otherwise. `/assist` requests are never delegated further.
+
+### Security Mapping
+
+| ACDP requirement | A2A mechanism |
+| --- | --- |
+| Authenticate agent-to-agent task requests | Card `securitySchemes` + `security`; credentials in HTTP headers (bearer, OAuth2, mTLS, API key) |
+| Agent identity bound to its domain | TLS on the card URL, plus the extension `params.id` check above |
+| Tamper-evident metadata | Agent Card `signatures` (JWS); verify before use |
+| Richer capability detail for authorised callers | Authenticated extended card (`supportsAuthenticatedExtendedCard`) |
+| Treat peer output as untrusted | Peer answers are returned to the calling model as tool results, not instructions |
+
+Discovery documents (Agent Card, `/metadata`, `/peers`, `/health`) remain unauthenticated so callers can learn how to authenticate. Task endpoints (A2A JSON-RPC, `/assist`) SHOULD require authentication outside closed networks.
+
+### Version Compatibility
+
+- **ACDP 1.0 ↔ 1.1.** Mixed networks work in both directions: 1.1 agents call 1.0 peers through `/assist`, and 1.0 agents still find 1.1 agents in the registry and can call their `/assist`.
+- **A2A 0.3 ↔ 1.0.** A2A 1.0 replaces the card's `url`/`preferredTransport`/`additionalInterfaces` with `supportedInterfaces[]` (each with `url`, `protocolBinding`, `protocolVersion`) and adds an `A2A-Version` header. The well-known card path and the `capabilities.extensions` structure are unchanged, so the ACDP extension carries over. Registries store cards opaquely and resolve the endpoint from either shape; agents advertise the A2A version they speak in `protocols` (`a2a/0.3`, `a2a/1.0`).
 
 ## Model Context Protocol (MCP) for Structured Tool Access and Discovery
 
@@ -1435,7 +1595,7 @@ By integrating the Agent Communication and Discovery Protocol, we achieve:
 - **Standardized Registration:** Each agent registers with structured JSON metadata in a global registry, making its capabilities transparent and searchable.
 - **DNS-Based Discovery:** Agents publish their network endpoints via SRV, TXT, and CNAME records, allowing clients to resolve service names like traditional websites.
 - **Peer-to-Peer Discovery:** A decentralized discovery layer enables agents to locate each other directly, ensuring resilience.
-- **Structured Interaction:** Once discovered, agents interact using standardized APIs and message formats, ensuring consistent and secure communication.
+- **Structured Interaction:** Once discovered, agents interact using standardized APIs and message formats (A2A as of ACDP 1.1), ensuring consistent and secure communication.
 - **Security & Governance:** Each agent’s metadata includes authentication and compliance details, and controlled access is enforced via the registry and DNS security (e.g., DNSSEC).
 - **Open & Controlled Access Models:** The protocol supports a spectrum from open networks to walled gardens.
 

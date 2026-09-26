@@ -68,16 +68,23 @@ class DNSResolver:
             capabilities = []
             description = ""
             version = "1.0"
+            protocols = []
+            card_path = None
 
             if txt_record:
                 # Parse TXT record data
                 for item in txt_record:
                     if item.startswith("caps="):
-                        capabilities = item[5:].split(",")
+                        capabilities = [c for c in item[5:].split(",") if c]
                     elif item.startswith("desc="):
                         description = item[5:]
                     elif item.startswith("ver="):
                         version = item[4:]
+                    elif item.startswith("proto="):
+                        protocols = [p for p in item[6:].split(",") if p]
+                    elif item.startswith("a2a="):
+                        # ACDP 1.1: path of the A2A Agent Card on the SRV host/port
+                        card_path = item[4:]
 
             # Construct agent info
             agent_info = {
@@ -87,8 +94,18 @@ class DNSResolver:
                 "capabilities": capabilities,
                 "description": description,
                 "version": version,
+                "acdp_version": version,
+                "protocols": protocols or ["rest-json"],
                 "source": "dns",
             }
+
+            if card_path:
+                scheme = "https" if port == 443 else "http"
+                base = f"{scheme}://{host}:{port}/"
+                agent_info["a2a"] = {
+                    "url": base,
+                    "card_url": base.rstrip("/") + "/" + card_path.lstrip("/"),
+                }
 
             return agent_info
 

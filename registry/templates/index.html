@@ -44,6 +44,12 @@
 
                             <span class="meta-label">Model:</span>
                             <span class="meta-value">{{ agent.model_info.type }}</span>
+
+                            <span class="meta-label">Protocols:</span>
+                            <span class="meta-value">
+                                {{ (agent.protocols or ['rest-json'])|join(', ') }}
+                                {% if agent.agent_card %}(<a href="/agents/{{ id }}/card" target="_blank">A2A card</a>){% endif %}
+                            </span>
                         </div>
                         <div class="agent-capabilities">
                             <div class="meta-label">Capabilities:</div>

@@ -91,7 +91,9 @@ class DiscoveryService:
 
         # Try registry first as it's more efficient for capability-based search
         try:
-            response = self.registry_client.get_agents(capability=capability)
+            response = self.registry_client.get_agents(
+                capability=capability, status="online"
+            )
             agents = response.get("agents", [])
 
             # Update cache with discovered agents

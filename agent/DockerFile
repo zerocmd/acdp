@@ -1,4 +1,6 @@
-FROM python:alpine
+# Debian-based image: Strands' dependencies (pydantic-core, protobuf, opentelemetry)
+# ship manylinux wheels; Alpine/musl builds were slow or failed.
+FROM python:3.12-slim
 
 WORKDIR /app
 
@@ -10,6 +12,8 @@ COPY . .
 EXPOSE 8000
 
 ENV PYTHONUNBUFFERED=1
-# ENV PYTHONPATH=/app
+
+HEALTHCHECK --interval=15s --timeout=5s --retries=5 \
+  CMD python -c "import urllib.request,os; urllib.request.urlopen(f'http://localhost:{os.environ.get(\"AGENT_PORT\",\"8000\")}/health', timeout=4)"
 
 CMD ["python", "agent.py"]
