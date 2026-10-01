@@ -78,7 +78,7 @@ function handle(event) {
       state.messages += 1;
       graph.message(d);
       transcript.add({ thread: d.thread_id, color: d.color, from: d.from_id, to: d.to_id,
-        intent: d.intent, text: d.body });
+        fromName: nameOf(d.from_id), toName: nameOf(d.to_id), intent: d.intent, text: d.body });
       break;
     case "message.failed": transcript.system(`Message ${nameOf(d.from_id)} → ${nameOf(d.to_id)} failed: ${d.error}`); break;
     case "verification.peer_check":

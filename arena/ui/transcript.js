@@ -28,7 +28,7 @@ export function createTranscript(feed, selects, { threadColor, companyOf }) {
     chip.style.background = threadColor(item.color);
     chip.title = item.thread;
     const who = document.createElement("span");
-    who.textContent = `${item.from} → ${item.to}`;
+    who.textContent = `${item.fromName || item.from} → ${item.toName || item.to}`;
     const intent = document.createElement("span");
     intent.className = `intent ${item.intent}`;
     intent.textContent = item.intent;

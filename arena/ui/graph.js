@@ -21,7 +21,16 @@ export function createGraph(el, { onNodeClick, threadColor }) {
     .linkDirectionalParticleColor((l) => l.color)
     .linkDirectionalParticleWidth(4)
     .onNodeClick((n) => onNodeClick(n.id))
-    .onRenderFramePost(drawClusterLabels);
+    .onRenderFramePost(drawClusterLabels)
+    .cooldownTicks(120)
+    .onEngineStop(() => graph.zoomToFit(400, 80));
+
+  graph.d3Force("charge").strength(-260);
+
+  // force-graph sizes the canvas to the window by default; fit it to the pane.
+  const fit = () => graph.width(el.clientWidth).height(el.clientHeight);
+  new ResizeObserver(fit).observe(el);
+  fit();
 
   graph.d3Force("cluster", (alpha) => {
     for (const [, members] of groups()) {
