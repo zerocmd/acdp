@@ -3,67 +3,23 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ACDP Agent Arena</title>
+  <title>ACDP Arena Workbench</title>
   <link rel="stylesheet" href="/ui/style.css">
   <script src="https://cdn.jsdelivr.net/npm/force-graph@1/dist/force-graph.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@dagrejs/dagre@1/dist/dagre.min.js"></script>
 </head>
 <body>
-  <header id="bar">
-    <strong>ACDP Agent Arena</strong>
-    <span id="stats">0 agents · 0 messages · 0 open threads</span>
-    <span id="mode" class="chip">connecting</span>
-    <span class="spacer"></span>
-    <button id="pause" type="button">Pause</button>
-    <select id="logs" aria-label="Saved run"></select>
-    <label>Speed <input id="speed" type="range" min="1" max="10" value="2"></label>
-    <button id="replay" type="button">Replay</button>
-    <button id="add" type="button" class="primary">Add agent</button>
-  </header>
-  <main>
-    <div id="graph" aria-label="Agent graph"></div>
-    <section id="side">
-      <div id="filters">
-        <select id="f-thread"><option value="">All threads</option></select>
-        <select id="f-agent"><option value="">All agents</option></select>
-        <select id="f-company"><option value="">All companies</option></select>
-        <select id="f-intent">
-          <option value="">All intents</option>
-          <option>request</option><option>reply</option><option>share</option>
-          <option>decline</option><option>challenge</option><option>verdict</option>
-          <option>close</option><option value="system">system</option>
-        </select>
-        <button id="f-clear" type="button">Clear</button>
-      </div>
-      <ol id="feed"></ol>
-    </section>
-  </main>
-  <dialog id="add-dialog">
-    <form id="add-form">
-      <h2>Add agent</h2>
-      <label>Name <input name="name" required maxlength="60"></label>
-      <label>Organization <input name="organization" required maxlength="80"></label>
-      <label>Domain <input name="domain" required placeholder="coastal-bank.example"></label>
-      <label>Capability <input name="capability" required pattern="[a-z0-9-]{1,40}"></label>
-      <label>Needs (comma-separated) <input name="needs" placeholder="soc-investigation"></label>
-      <label>Model
-        <select name="model"><option value="haiku">Haiku</option><option value="sonnet">Sonnet</option></select>
-      </label>
-      <label>Agenda <textarea name="agenda" rows="3" maxlength="1000"></textarea></label>
-      <label><input type="checkbox" name="generate"> Generate prompt with Sonnet</label>
-      <label>Misconfigure
-        <select name="misconfigure">
-          <option value="none">None</option>
-          <option value="no_txt">Missing TXT record</option>
-          <option value="wrong_key">Wrong key in DNS</option>
-        </select>
-      </label>
-      <p id="add-error" role="alert"></p>
-      <div class="actions">
-        <button type="button" id="add-cancel">Cancel</button>
-        <button type="submit" class="primary">Add</button>
-      </div>
-    </form>
-  </dialog>
-  <script type="module" src="/ui/app.js"></script>
+  <div id="root"></div>
+  <div id="boot-error" class="boot-error" hidden></div>
+  <script type="module">
+    const fail = (what) => {
+      const box = document.getElementById("boot-error");
+      box.textContent = `The Workbench could not load ${what}. Check access to cdn.jsdelivr.net, then reload.`;
+      box.hidden = false;
+    };
+    if (typeof ForceGraph === "undefined") fail("force-graph");
+    else if (typeof dagre === "undefined") fail("dagre");
+    else import("/ui/app.js").catch((e) => fail(`the UI modules (${e.message})`));
+  </script>
 </body>
 </html>

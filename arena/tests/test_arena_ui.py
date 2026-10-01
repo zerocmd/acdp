@@ -11,15 +11,25 @@ from arena.api import register_routes
 UI = Path(__file__).resolve().parents[1] / "ui"
 
 
+UI_FILES = ["preact.js", "api.js", "app.js", "store.js", "palette.js", "style.css",
+            "components/topbar.js", "components/sidebar.js", "components/viewswitch.js",
+            "components/legend.js", "components/addagent.js", "components/chat.js",
+            "views/network.js"]
+
+
 def test_ui_files_are_served(tmp_path):
     arena = make_arena(make_cast(SOC, owner="northgate-soc", closer="northgate-soc"))
     register_routes(arena, UI, tmp_path)
     client = TestClient(arena.app)
     index = client.get("/").text
-    assert "cdn.jsdelivr.net/npm/force-graph@1" in index
-    assert '<script type="module" src="/ui/app.js">' in index
-    for name in ("app.js", "graph.js", "transcript.js", "controls.js", "style.css"):
+    for url in ("cdn.jsdelivr.net/npm/force-graph@1", "cdn.jsdelivr.net/npm/@dagrejs/dagre@1"):
+        assert url in index
+    assert 'import("/ui/app.js")' in index
+    assert "htm@3/preact/standalone.module.js" in (UI / "preact.js").read_text()
+    for name in UI_FILES:
         assert client.get(f"/ui/{name}").status_code == 200, name
+    for old in ("graph.js", "transcript.js", "controls.js"):
+        assert not (UI / old).exists(), old
 
 
 ARENA = Path(__file__).resolve().parents[1]
