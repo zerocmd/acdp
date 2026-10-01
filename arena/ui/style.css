@@ -1,0 +1,41 @@
+:root {
+  --bg: #f7f7f5; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6b66;
+  --line: #e2e2dc; --ok: #2f9e44; --pending: #e8a317; --bad: #d6336c;
+  --accent: #3b5bdb;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141413; --panel: #1e1e1c; --text: #ececea; --muted: #9a9a94;
+    --line: #33332f; --ok: #51cf66; --pending: #fcc419; --bad: #f06595;
+    --accent: #748ffc;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; font: 14px/1.4 system-ui, sans-serif; background: var(--bg); color: var(--text); }
+#bar { display: flex; gap: 10px; align-items: center; padding: 8px 16px;
+  border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
+.spacer { flex: 1; }
+.chip { padding: 2px 8px; border-radius: 10px; background: var(--line); font-size: 12px; }
+button, select, input, textarea { font: inherit; color: inherit; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+main { display: flex; height: calc(100vh - 50px); }
+#graph { flex: 0 0 65%; min-width: 0; }
+#side { flex: 1; display: flex; flex-direction: column; border-left: 1px solid var(--line);
+  background: var(--panel); min-width: 0; }
+#filters { display: flex; gap: 6px; padding: 8px; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+#feed { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 1; }
+#feed li { padding: 6px 4px; border-bottom: 1px solid var(--line); }
+#feed li.system { color: var(--muted); font-size: 12px; }
+#feed .head { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); }
+#feed .thread { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+#feed .intent { padding: 0 6px; border-radius: 8px; background: var(--line); }
+#feed .intent.decline, #feed .intent.challenge { background: var(--bad); color: #fff; }
+#feed .intent.verdict { background: var(--ok); color: #fff; }
+#feed .body { margin-top: 2px; white-space: pre-wrap; }
+dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--panel);
+  color: var(--text); width: min(460px, calc(100vw - 32px)); }
+dialog form { display: flex; flex-direction: column; gap: 8px; }
+dialog label { display: flex; flex-direction: column; gap: 2px; }
+dialog .actions { display: flex; justify-content: flex-end; gap: 8px; }
+#add-error { color: var(--bad); min-height: 1em; margin: 0; }
