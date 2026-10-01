@@ -4637,7 +4637,8 @@ def test_bad_injection_changes_nothing(change, message):
 def test_misconfigured_agent_fails_verification(mode, reason):
     arena = make_arena(make_cast(SOC, owner="northgate-soc", closer="northgate-soc"))
     asyncio.run(arena.setup())
-    spec = AgentSpec.from_dict(spec_dict(slug="broken", domain="broken.example"))
+    spec = AgentSpec.from_dict(spec_dict(
+        slug="broken", organization="Broken Co", domain="broken.example"))
     asyncio.run(arena.add_agent(spec, misconfigure=mode))
     assert events(arena, "agent.verification_failed")[-1]["reasons"] == [reason]
 

@@ -175,3 +175,52 @@ def spec_dict(**change) -> Dict[str, Any]:
     }
     data.update(change)
     return data
+
+
+from arena.cast import AgentSpec, Cast, Seed  # noqa: E402
+
+
+def make_cast(*specs: Dict[str, Any], owner: str, closer: str) -> Cast:
+    return Cast(
+        seed=Seed(owner=owner, closer=closer, title="Phishing case", brief="Brief."),
+        agents=[AgentSpec.from_dict(spec_dict(**s)) for s in specs],
+    )
+
+
+SOC = dict(slug="northgate-soc")
+INTEL = dict(slug="halcyon-intel", name="Threat Intel Analyst", organization="Halcyon Intel",
+             domain="halcyon-intel.example", capability="threat-intel",
+             needs=["soc-investigation"])
+ISAC = dict(slug="finshare-isac", name="ISAC Coordinator", organization="FinShare ISAC",
+            domain="finshare-isac.example", capability="coordination",
+            needs=["soc-investigation", "threat-intel"])
+IMPOSTOR = dict(slug="lookalike-intel", name="Threat Intel Analyst",
+                organization="Halcyon Intel", domain="halcyon-inte1.example",
+                capability="threat-intel", needs=["soc-investigation"], model="haiku",
+                role="impostor", cadence=[120, 180])
+
+
+def make_arena(cast: Cast, scripts: Optional[Dict[str, Callable]] = None, settings=None):
+    """Arena wired to FakeAcdp, scripted models, and in-process HTTP."""
+    import httpx
+
+    from arena.host import Arena, Settings
+
+    scripts = scripts or {}
+    holder: Dict[str, Any] = {}
+    arena = Arena(
+        cast,
+        acdp=FakeAcdp(),
+        http_factory=lambda: httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=holder["app"]), timeout=10
+        ),
+        model_factory=lambda tier, slug: ScriptedModel(
+            scripts.get(slug, lambda prompt: {"action": "wait"})
+        ),
+        settings=settings or Settings(guard_interval=0.01),
+        bus=EventBus("test"),
+    )
+    holder["app"] = arena.app
+    arena.ctx.sleep = no_sleep
+    arena.ctx.retry_delay = 0
+    return arena
