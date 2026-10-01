@@ -1,23 +1,36 @@
 # Agent Communication & Discovery Protocol PoC
 
-This proof of concept implements a basic version of the [Agent Communication & Discovery Protocol](https://github.com/zerocmd/acdp/blob/c743887b500489e582764cf047cbd833af3d6c32/ACDP.md), allowing AI agents to register, discover, communicate with each other, and share memory. It uses a cybersecurity scenario (see agent capabilities) and so long as you phrase your communication as a question, they will collaborate. This implementation is only provided as an example to visualize the approaches outlined in the document. It's not intended to be comprehensive and does not cover any of the security related options outlined at all.
+This proof of concept implements the [Agent Communication & Discovery Protocol](ACDP.md), allowing AI agents to register, discover, communicate with each other, and share memory. Agents are built with the [Strands Agents SDK](https://strandsagents.com/) and talk to each other over the [Agent2Agent (A2A) protocol](https://a2a-protocol.org/): ACDP finds the right peer (DNS, registry, gossip), A2A carries the request. It uses a cybersecurity scenario (see agent capabilities); each agent's model decides when a question needs a specialist peer and consults it.
+
+This implementation is an example that visualises the approaches in the specification. It is not comprehensive: transport is plain HTTP inside the Docker network and most of the security options in the specification are not implemented. See [docs/STRANDS_A2A_REVISION.md](docs/STRANDS_A2A_REVISION.md) for the design of the Strands/A2A revision.
 
 ## Components
 
-- **DNS Server (BIND9)**: Provides DNS-based discovery with SRV and TXT records
-- **Central Registry**: Flask-based service for agent registration, discovery, and shared memory
-- **Agents**: Multiple Anthropic Sonnet-powered agents that register, discover each other, and collaborate
+- **DNS Server (BIND9)**: DNS-based discovery with SRV and TXT records. TXT records carry `a2a=` (Agent Card path) and `proto=` keys for ACDP 1.1 agents.
+- **Central Registry**: Flask service for agent registration, discovery, heartbeats, stored A2A Agent Cards, and shared memory.
+- **Agents**: [Strands Agents](https://strandsagents.com/) (Anthropic Claude by default, Amazon Bedrock optional). Each agent is an A2A server (Agent Card at `/.well-known/agent-card.json`, JSON-RPC at `/`) and also serves the ACDP REST API (`/metadata`, `/peers`, `/chat`, ...). Peers are consulted through model tools: `find_agents` (ACDP discovery) and `ask_agent` (A2A call with a bounded delegation trace).
 
 ## Setup
 
 You will require a BIND server as a Docker image: [BIND 9](https://hub.docker.com/r/ubuntu/bind9/)
 
 1. Clone this repository
-2. The PoC uses Anthropic's Sonnet. Set your Anthropic API key in an environment variable:
+2. Set your Anthropic API key:
 
    ```bash
    export ANTHROPIC_API_KEY=your_api_key_here
    ```
+
+   Optional settings (defaults in brackets):
+
+   | Variable | Purpose |
+   | --- | --- |
+   | `MODEL_PROVIDER` [`anthropic`] | `anthropic` or `bedrock` (Bedrock needs `MODEL_ID` and AWS credentials/region) |
+   | `MODEL_ID` [`claude-sonnet-5-5`] | Model for every agent |
+   | `COLLABORATION_MODE` [`auto`] | `auto`: the model decides when to consult peers; `always`: consult at least one relevant peer per question; `off`: no peer tools |
+   | `ACDP_MAX_DELEGATION_DEPTH` [`2`] | Longest agent-to-agent chain (A -> B -> C is 2) |
+   | `ACDP_MAX_PEER_CALLS` [`4`] | Peer calls one request may make |
+   | `ACDP_A2A_TOKEN` [unset] | Shared bearer token required on A2A JSON-RPC, `/assist`, `POST /memory`, `/gossip/start` and `/gossip/stop`. `/chat` stays open; restrict it at the network level |
 
 3. Install dependencies (if not using Docker):
 
@@ -28,7 +41,7 @@ You will require a BIND server as a Docker image: [BIND 9](https://hub.docker.co
 4. Start the services:
 
    ```bash
-   docker-compose up -d
+   docker compose up -d --build
    ```
 
 ## Usage
@@ -48,12 +61,47 @@ dig @localhost _llm-agent._tcp.agent1.agents.local TXT
 
 Agent 1: <http://localhost:8001/chat>
 Agent 2: <http://localhost:8002/chat>
-Agent 3: <http://localhost:8003/chat>
+Agent 0: <http://localhost:8003/chat>
+Agent 4: <http://localhost:8004/chat>
+Agent 3: <http://localhost:8005/chat>
 
 Example API call:
 
 ```bash
 curl -X POST http://localhost:8001/chat -H "Content-Type: application/json" -d '{"text": "Hello, can you help me with something?"}'
+```
+
+When the agent consulted peers, the response includes `meta.peers` and `meta.transports` (`a2a`, or `rest-assist` for ACDP 1.0 peers).
+
+### Talk to Agents over A2A
+
+Every agent is a standard A2A server, so any A2A client can call it.
+
+```bash
+# Agent Card (includes the ACDP extension with the agent's ACDP id)
+curl http://localhost:8005/.well-known/agent-card.json
+
+# JSON-RPC message/send
+curl -X POST http://localhost:8005/ -H "Content-Type: application/json" -d '{
+  "jsonrpc": "2.0", "id": "1", "method": "message/send",
+  "params": {"message": {"role": "user", "messageId": "m1",
+    "parts": [{"kind": "text", "text": "What are common signs of lateral movement in Windows logs?"}]}}
+}'
+```
+
+Discover through the registry, then call with the A2A Python SDK:
+
+```bash
+python examples/a2a_client.py --capability log_analysis \
+  --question "What are common signs of lateral movement in Windows logs?"
+```
+
+Registry queries for A2A-capable agents:
+
+```bash
+curl "http://localhost:5001/agents?protocol=a2a&status=online"
+curl "http://localhost:5001/agents?skill=threat_detection"
+curl http://localhost:5001/agents/agent3.agents.local/card
 ```
 
 ### View Peer Information
@@ -104,40 +152,33 @@ Navigate to the "Shared Memory" tab to:
 
 ### Add another Agent
 
-Agents are defined in `docker-compose.yml`
+Agents are defined in `docker-compose.yml` and share the `x-agent` / `x-agent-env` blocks:
 
 ```yaml
-  # Add the new agent with correct context
   agent5:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    <<: *agent
     ports:
-      - "8005:8000"
+      - "8006:8000"
     environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - AGENT_ID=agent5.agents.local
-      - AGENT_NAME=Agent Analyzer
-      - AGENT_DESCRIPTION=AI assistant specializing in security analysis and threat detection
-      - AGENT_PORT=8000
-      - AGENT_HOSTNAME=agent5
-      - REGISTRY_URL=http://registry:5000
-      - DNS_API_URL=http://bind:8053
-      - AGENT_CAPABILITIES=security,threat_detection,attack_patterns
-    networks:
-      - agent_network
+      <<: *agent-env
+      AGENT_ID: agent5.agents.local
+      AGENT_NAME: Agent Analyzer
+      AGENT_CAPABILITIES: security,threat_detection,attack_patterns
+      AGENT_DESCRIPTION: AI assistant specializing in security analysis and threat detection
+      AGENT_HOSTNAME: agent5.agents.local
 ```
 
 ## Architecture
 
-This implementation follows the Agent Communication & Discovery Protocol specification:
+This implementation follows the Agent Communication & Discovery Protocol specification with the ACDP 1.1 A2A profile:
 
-1. Agents register with both DNS (via SRV/TXT records) and a central registry
-2. Agents discover each other through the registry and maintain peer lists
-3. Agents communicate directly with each other via REST APIs
-4. Agents can collaborate by requesting assistance from peers with relevant capabilities
-5. Agents can store and retrieve information using the shared memory system
-6. Heartbeats maintain registry consistency
+1. Agents register with DNS (SRV + TXT, including `a2a=` and `proto=`) and with the central registry (metadata plus their A2A Agent Card)
+2. Agents discover each other through the registry, DNS and gossip, and maintain peer lists
+3. Agents call each other over A2A JSON-RPC; ACDP 1.0 peers are still reached through `/assist`
+4. Each agent's Strands model decides when to consult peers, using `find_agents` and `ask_agent` tools
+5. Delegation chains are bounded: every A2A message carries a hop count and trace in the ACDP extension metadata, and agents refuse cycles and over-long chains
+6. Agents can store and retrieve information using the shared memory system, also exposed to the model as tools
+7. Heartbeats maintain registry consistency; the registry reports agents as `online` or `stale`
 
 ### Shared Memory Architecture
 
@@ -150,33 +191,39 @@ The shared memory system follows a simple client-server model:
 
 ### Agent Collaboration
 
-Agents can collaborate to solve problems through:
+Agents collaborate through tools the model calls when it judges them useful:
 
-1. **Capability-based Discovery**: Agents find peers with specific abilities
-2. **Assistance Requests**: Agents can ask peers for help on specific questions
-3. **Knowledge Sharing**: Agents can reference shared memory for context
-4. **Collective Response**: Agents combine peer responses with their own knowledge
+1. **find_agents**: searches known peers and the registry by capability (ACDP capability or A2A skill) or keyword
+2. **ask_agent**: resolves the peer through ACDP, fetches and checks its Agent Card, and sends the question over A2A (several calls in one turn run in parallel)
+3. **read_shared_memory / write_shared_memory**: the registry's shared memory
+4. The agent writes the final answer, attributing peer contributions by name
+5. The interaction is recorded in shared memory
 
-When an agent receives a question that might benefit from collaboration:
-
-1. It identifies peers with relevant capabilities
-2. It sends assistance requests to those peers
-3. It collects responses from peers
-4. It crafts a comprehensive response that incorporates peer knowledge
-5. It records the interaction in shared memory
+With `COLLABORATION_MODE=always` the prompt requires consulting at least one relevant peer per question, which is closest to the original PoC behaviour.
 
 ## Extensions
 
 This proof of concept can be extended with:
 
-- Authentication and security measures
-- Additional agent capabilities
-- Peer-to-peer task delegation
+- HTTPS/mTLS and signed Agent Cards (A2A `signatures`)
+- OAuth2 or per-agent credentials instead of the shared `ACDP_A2A_TOKEN`
+- A2A 1.0 once the Strands SDK supports it (see the revision document)
+- MCP servers discovered through ACDP and attached to agents with the Strands MCP client
 - DNSSEC for DNS security
-- HTTPS for transport layer security
-- Persistent storage for agent and shared memory
+- Persistent storage for the registry and shared memory
 
 ## Testing the Implementation
+
+### Automated Tests
+
+Unit and in-process integration tests need no API key or containers. The integration tests run several agents in one process with a scripted Strands model and route real A2A JSON-RPC between them.
+
+```bash
+pip install -r requirements.txt
+pytest
+```
+
+The scripts in `agent/test_*.py` and `agent/monitor_collaboration.py` exercise a running `docker compose` deployment.
 
 ### Basic Tests
 
@@ -225,12 +272,12 @@ This proof of concept can be extended with:
    }'
    ```
 
-   In the response, observe if the agent gathered assistance from peers with security expertise.
+   In the response, `meta.peers` lists the peers the agent consulted.
 
 2. **Check Collaboration Logs**:
 
    ```bash
-   docker compose logs agent1 | grep -E "Question detected|peers for collaboration|Querying peer|peer responses|Received response from peer|Received assistance request from"
+   docker compose logs agent1 | grep -E "Consulting|Delegation to|Assistance request"
    ```
 
 ### Testing Shared Memory

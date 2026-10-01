@@ -1,7 +1,5 @@
-flask==2.3.3
-requests==2.31.0
-dnspython==2.4.0
-anthropic
-httpx>=0.25.0
-anyio==3.7.1
-gunicorn==21.2.0
+# Strands Agents runtime + A2A server/client (a2a-sdk <0.4, FastAPI, uvicorn) + Anthropic provider
+strands-agents[a2a,anthropic]>=1.57.1,<2
+httpx>=0.28.1,<1
+requests>=2.32.4
+dnspython>=2.7.0

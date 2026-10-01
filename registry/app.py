@@ -4,6 +4,12 @@ import datetime
 import traceback
 import logging
 import os
+import re
+import urllib.parse
+
+import requests
+
+from services.search import SearchService, agent_status
 
 app = Flask(__name__, static_folder="static")
 logging.basicConfig(level=logging.INFO)
@@ -17,6 +23,47 @@ shared_memory = {}
 
 # In-memory store of agent chat messages
 agent_chats = {}
+
+# All state above is per-process. Run a single worker process (threads are fine);
+# multiple workers each hold a different registry. See registry/DockerFile.
+search_service = SearchService(agents)
+
+# DNS-style agent ids, e.g. agent1.agents.local
+AGENT_ID_RE = re.compile(r"^(?=.{1,253}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$")
+
+
+def _summary(agent):
+    """Agent entry for list responses: everything except the full Agent Card."""
+    entry = {k: v for k, v in agent.items() if k != "agent_card"}
+    entry["status"] = agent_status(agent)
+    return entry
+
+
+def _agent_base_url(agent_id, agent_info):
+    """Origin (scheme://host:port) of an agent's HTTP surface."""
+    interfaces = agent_info.get("interfaces", {})
+    for candidate in ((agent_info.get("a2a") or {}).get("url"), interfaces.get("a2a"), interfaces.get("rest")):
+        if candidate:
+            parsed = urllib.parse.urlparse(candidate)
+            if parsed.scheme in ("http", "https") and parsed.netloc:
+                return f"{parsed.scheme}://{parsed.netloc}"
+    host = agent_info.get("host") or (agent_id.split(".")[0] if "." in agent_id else None)
+    port = agent_info.get("port") or 8000
+    return f"http://{host}:{port}" if host else None
+
+
+def _validate_card(card):
+    """Minimal structural check of an A2A Agent Card (0.3 or 1.0 JSON)."""
+    if not isinstance(card, dict):
+        return "agent_card must be an object"
+    if not card.get("name"):
+        return "agent_card.name is required"
+    has_url = card.get("url") or any(
+        i.get("url") for i in card.get("supportedInterfaces") or [] if isinstance(i, dict)
+    )
+    if not has_url:
+        return "agent_card must declare url (A2A 0.3) or supportedInterfaces (A2A 1.0)"
+    return None
 
 
 # Define custom Jinja2 filters
@@ -49,67 +96,27 @@ def index():
 
 @app.route("/agents", methods=["GET"])
 def get_agents():
-    """Return all registered agents or filter by capability"""
+    """Return registered agents, optionally filtered.
+
+    Filters: capability (ACDP capability or A2A skill), skill (A2A skill id/tag),
+    query (name/description), protocol ("a2a" matches "a2a/0.3"), provider,
+    status (online|stale), plus limit/offset pagination.
+    """
     try:
-        capability = request.args.get("capability")
-        query = request.args.get("query")
-        protocol = request.args.get("protocol")
-        provider = request.args.get("provider")
-        limit = request.args.get("limit", type=int)
-        offset = request.args.get("offset", 0, type=int)
-
-        # If only capability is provided, use the simple search
-        if capability and not (query or protocol or provider):
-            results = []
-            for agent_id, agent in agents.items():
-                if capability in agent.get("capabilities", []):
-                    results.append(agent)
-
-            # Apply pagination if specified
-            if limit is not None:
-                results = results[offset : offset + limit]
-
-            return jsonify({"agents": results})
-
-        # If multiple criteria are provided, use the advanced search
-        if capability or query or protocol or provider:
-            results = []
-            for agent_id, agent in agents.items():
-                # Check capability
-                if capability and capability not in agent.get("capabilities", []):
-                    continue
-
-                # Check query in name or description
-                if query:
-                    query_lower = query.lower()
-                    name = agent.get("name", "").lower()
-                    description = agent.get("description", "").lower()
-                    if query_lower not in name and query_lower not in description:
-                        continue
-
-                # Check protocol
-                if protocol and protocol not in agent.get("protocols", []):
-                    continue
-
-                # Check provider
-                if provider and agent.get("model_info", {}).get("provider") != provider:
-                    continue
-
-                # If we got here, the agent matches all criteria
-                results.append(agent)
-
-            # Apply pagination if specified
-            if limit is not None:
-                results = results[offset : offset + limit]
-
-            return jsonify({"agents": results})
-
-        # If no filters, return all agents (with pagination if specified)
-        all_agents = list(agents.values())
-        if limit is not None:
-            all_agents = all_agents[offset : offset + limit]
-
-        return jsonify({"agents": all_agents})
+        criteria = {
+            "capabilities": [request.args["capability"]] if request.args.get("capability") else None,
+            "skill": request.args.get("skill"),
+            "query": request.args.get("query"),
+            "protocol": request.args.get("protocol"),
+            "provider": request.args.get("provider"),
+            "status": request.args.get("status"),
+        }
+        results = search_service.search_by_criteria(
+            criteria,
+            limit=request.args.get("limit", type=int),
+            offset=request.args.get("offset", 0, type=int),
+        )
+        return jsonify({"agents": [_summary(agent) for agent in results]})
     except Exception as e:
         logger.error(f"Error getting agents: {e}")
         logger.error(traceback.format_exc())
@@ -123,7 +130,7 @@ def get_agent(agent_id):
         agent = agents.get(agent_id)
         if not agent:
             return jsonify({"error": "Agent not found"}), 404
-        return jsonify(agent)
+        return jsonify(dict(agent, status=agent_status(agent)))
     except Exception as e:
         logger.error(f"Error getting agent {agent_id}: {e}")
         logger.error(traceback.format_exc())
@@ -136,15 +143,31 @@ def register_agent():
     try:
         data = request.json
 
+        if not isinstance(data, dict):
+            return jsonify({"error": "Expected a JSON object"}), 400
+
         # Validate required fields
         required_fields = ["id", "name", "capabilities", "interfaces"]
         for field in required_fields:
             if field not in data:
                 return jsonify({"error": f"Missing required field: {field}"}), 400
 
-        # Update or create agent
         agent_id = data["id"]
-        data["last_update"] = time.time()
+        if not isinstance(agent_id, str) or not AGENT_ID_RE.fullmatch(agent_id):
+            return jsonify({"error": "id must be a DNS-style name, e.g. agent1.agents.local"}), 400
+        if not isinstance(data["capabilities"], list):
+            return jsonify({"error": "capabilities must be a list"}), 400
+
+        # ACDP 1.1 agents include their A2A Agent Card; ACDP 1.0 agents do not.
+        if "agent_card" in data:
+            problem = _validate_card(data["agent_card"])
+            if problem:
+                return jsonify({"error": problem}), 400
+
+        # Update or create agent
+        now = time.time()
+        data["registered_at"] = agents.get(agent_id, {}).get("registered_at", now)
+        data["last_update"] = now
 
         # If this is an update, log it
         if agent_id in agents:
@@ -166,6 +189,42 @@ def register_agent():
         logger.error(f"Error registering agent: {e}")
         logger.error(traceback.format_exc())
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/agents/<agent_id>/card", methods=["GET"])
+def get_agent_card(agent_id):
+    """The A2A Agent Card an agent registered (ACDP 1.1+)."""
+    agent = agents.get(agent_id)
+    if not agent:
+        return jsonify({"error": "Agent not found"}), 404
+    if not agent.get("agent_card"):
+        return jsonify({"error": "Agent did not register an A2A Agent Card"}), 404
+    return jsonify(agent["agent_card"])
+
+
+@app.route("/.well-known/agent-registry", methods=["GET"])
+def well_known_registry():
+    """Registry descriptor (ACDP.md, "Well-Known URI Pattern")."""
+    base = request.host_url.rstrip("/")
+    return jsonify(
+        {
+            "registries": [
+                {
+                    "name": os.environ.get("REGISTRY_NAME", "ACDP PoC Registry"),
+                    "endpoint": base,
+                    "api_version": "1.1",
+                    "capabilities": ["agent-discovery", "a2a-agent-cards"],
+                    "endpoints": {
+                        "agents": "/agents",
+                        "agent": "/agents/{id}",
+                        "agent_card": "/agents/{id}/card",
+                        "register": "/registerAgent",
+                        "heartbeat": "/agents/{id}/heartbeat",
+                    },
+                }
+            ]
+        }
+    )
 
 
 @app.route("/agents/<agent_id>/heartbeat", methods=["PUT"])
@@ -207,35 +266,11 @@ def get_agent_peers(agent_id):
             return jsonify({"error": "Agent not found"}), 404
 
         # Make a request to the agent's peers endpoint
-        agent_info = agents[agent_id]
-        host = agent_info.get("host")
-        port = agent_info.get("port")
-
-        if not host or not port:
-            # Try to extract from interfaces
-            rest_interface = agent_info.get("interfaces", {}).get("rest", "")
-            if rest_interface:
-                import urllib.parse
-
-                parsed = urllib.parse.urlparse(rest_interface)
-                if parsed.netloc:
-                    host_port = parsed.netloc.split(":")
-                    host = host_port[0]
-                    if len(host_port) > 1:
-                        port = int(host_port[1])
-
-        # If we still don't have host/port, try to use the agent ID
-        if not host and "." in agent_id:
-            host = agent_id.split(".")[0]  # Use service name from domain
-            port = 8000  # Default port
-
-        if not host or not port:
+        base = _agent_base_url(agent_id, agents[agent_id])
+        if not base:
             return jsonify({"error": "Could not determine agent endpoint"}), 400
 
-        # Make the request
-        import requests
-
-        response = requests.get(f"http://{host}:{port}/peers", timeout=5)
+        response = requests.get(f"{base}/peers", timeout=5)
         response.raise_for_status()
 
         return jsonify(response.json())
@@ -257,37 +292,11 @@ def chat_with_agent(agent_id):
             return jsonify({"error": "Missing text parameter"}), 400
 
         # Make a request to the agent's chat endpoint
-        agent_info = agents[agent_id]
-        host = agent_info.get("host")
-        port = agent_info.get("port")
-
-        if not host or not port:
-            # Try to extract from interfaces
-            rest_interface = agent_info.get("interfaces", {}).get("rest", "")
-            if rest_interface:
-                import urllib.parse
-
-                parsed = urllib.parse.urlparse(rest_interface)
-                if parsed.netloc:
-                    host_port = parsed.netloc.split(":")
-                    host = host_port[0]
-                    if len(host_port) > 1:
-                        port = int(host_port[1])
-
-        # If we still don't have host/port, try to use the agent ID
-        if not host and "." in agent_id:
-            host = agent_id.split(".")[0]  # Use service name from domain
-            port = 8000  # Default port
-
-        if not host or not port:
+        base = _agent_base_url(agent_id, agents[agent_id])
+        if not base:
             return jsonify({"error": "Could not determine agent endpoint"}), 400
 
-        # Make the request
-        import requests
-
-        response = requests.post(
-            f"http://{host}:{port}/chat", json={"text": data["text"]}, timeout=30
-        )
+        response = requests.post(f"{base}/chat", json={"text": data["text"]}, timeout=180)
         response.raise_for_status()
 
         # Store the chat message and response

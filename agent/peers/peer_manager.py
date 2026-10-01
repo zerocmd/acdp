@@ -10,6 +10,8 @@ import logging
 from typing import Dict, List, Set, Any, Optional
 import json
 
+from utils.endpoints import endpoint_url
+
 logger = logging.getLogger(__name__)
 
 
@@ -178,6 +180,11 @@ class PeerManager:
 
             return healthy_peers
 
+    def health_of(self, peer_id: str) -> str:
+        """Last known health status without making a network call."""
+        with self._peer_lock:
+            return self._peer_health.get(peer_id, "unknown")
+
     def check_peer_health(self, peer_id: str) -> str:
         """
         Check if a peer is healthy.
@@ -194,17 +201,14 @@ class PeerManager:
             return "unknown"
 
         try:
-            # Extract host/port from peer info
-            host, port = self._extract_host_port(peer_id, peer_info)
+            health_url = endpoint_url(peer_id, peer_info, "ping", "/health")
 
-            if not host:
+            if not health_url:
                 logger.warning(f"Cannot determine host for peer {peer_id}")
                 with self._peer_lock:
                     self._peer_health[peer_id] = "unknown"
                 return "unknown"
 
-            # Check health endpoint
-            health_url = f"http://{host}:{port}/health"
             response = requests.get(health_url, timeout=2)
 
             if response.status_code == 200:
@@ -394,68 +398,6 @@ class PeerManager:
             # Otherwise, select a random subset
             return random.sample(peer_ids, fanout)
 
-    def _extract_host_port(self, peer_id: str, peer_info: Dict[str, Any]) -> tuple:
-        """
-        Extract host and port from peer information.
-
-        Args:
-            peer_id: Peer ID
-            peer_info: Peer information
-
-        Returns:
-            Tuple of (host, port)
-        """
-        # First try to get explicit host and port
-        host = peer_info.get("host")
-
-        # Be more explicit about handling port - first check direct port field
-        port = None
-        if "port" in peer_info:
-            try:
-                port = int(peer_info["port"])
-                logger.debug(f"Found explicit port {port} in peer info for {peer_id}")
-            except (ValueError, TypeError):
-                logger.warning(
-                    f"Invalid port in peer info for {peer_id}: {peer_info.get('port')}"
-                )
-
-        # If no host, try to extract from interfaces
-        if not host and "interfaces" in peer_info and "rest" in peer_info["interfaces"]:
-            try:
-                from urllib.parse import urlparse
-
-                parsed = urlparse(peer_info["interfaces"]["rest"])
-                if parsed.netloc:
-                    host_parts = parsed.netloc.split(":")
-                    host = host_parts[0]
-                    if len(host_parts) > 1 and not port:
-                        try:
-                            port = int(host_parts[1])
-                            logger.debug(
-                                f"Extracted port {port} from REST interface for {peer_id}"
-                            )
-                        except (ValueError, TypeError):
-                            logger.warning(
-                                f"Invalid port in REST interface for {peer_id}"
-                            )
-            except Exception as e:
-                logger.error(f"Error parsing REST interface for {peer_id}: {e}")
-
-        # If still no host, try using the peer_id (domain)
-        if not host and "." in peer_id:
-            # For Docker, use the service name part
-            host = peer_id.split(".")[0]
-            logger.debug(f"Using service name {host} from peer_id {peer_id}")
-
-        # Default port if needed - this is the most common issue
-        if not port:
-            # In Docker Compose, services typically expose their internal port
-            # If we're in the same Docker network, we should use the container's internal port
-            port = 8000
-            logger.debug(f"Using default port {port} for {peer_id}")
-
-        return host, port
-
     def _gossip_with_peer(self, peer_id: str) -> Dict[str, Any]:
         """
         Exchange peer information with a specific peer.
@@ -471,15 +413,13 @@ class PeerManager:
         if not peer_info:
             return {"status": "error", "error": "Peer not found"}
 
-        # Extract peer's host and port
-        host, port = self._extract_host_port(peer_id, peer_info)
+        # Resolve the peer's gossip endpoint
+        peers_url = endpoint_url(peer_id, peer_info, "peers", "/peers")
 
         # Ensure we have a host to contact
-        if not host:
+        if not peers_url:
             return {"status": "error", "error": "Cannot determine peer host"}
 
-        # Prepare the API URL
-        peers_url = f"http://{host}:{port}/peers"
         logger.debug(f"Getting peers from {peer_id} at {peers_url}")
 
         # Step 1: Get the peer's peers

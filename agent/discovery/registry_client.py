@@ -41,6 +41,8 @@ class RegistryClient:
         provider=None,
         limit=None,
         offset=None,
+        skill=None,
+        status=None,
     ) -> Dict:
         """
         Get agents from the registry with optional filtering.
@@ -73,6 +75,10 @@ class RegistryClient:
             params["limit"] = limit
         if offset is not None:
             params["offset"] = offset
+        if skill:
+            params["skill"] = skill
+        if status:
+            params["status"] = status
 
         try:
             response = requests.get(url, params=params, timeout=10)
@@ -98,6 +104,18 @@ class RegistryClient:
                 logger.error(f"Response status: {e.response.status_code}")
                 logger.error(f"Response content: {e.response.text}")
             raise
+
+    def get_agent_card(self, agent_id: str) -> Optional[Dict]:
+        """Get the A2A Agent Card the registry stored for an agent (None if absent)."""
+        try:
+            response = requests.get(f"{self.base_url}/agents/{agent_id}/card", timeout=10)
+            if response.status_code == 404:
+                return None
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error fetching agent card for {agent_id}: {e}")
+            return None
 
     def heartbeat(self, agent_id: str) -> Dict:
         """Send a heartbeat for an agent"""

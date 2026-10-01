@@ -7,7 +7,16 @@ import time
 logger = logging.getLogger(__name__)
 
 
-def register_dns(domain, host, port, capabilities="", description=""):
+def register_dns(
+    domain,
+    host,
+    port,
+    capabilities="",
+    description="",
+    a2a_card_path="",
+    protocols="",
+    version="1.0",
+):
     """
     Register agent in DNS by calling the DNS update API
 
@@ -17,6 +26,9 @@ def register_dns(domain, host, port, capabilities="", description=""):
         port: The port the agent is listening on
         capabilities: Comma-separated list of capabilities
         description: Short description of the agent
+        a2a_card_path: Path of the A2A Agent Card on host:port (TXT "a2a=")
+        protocols: Comma-separated protocol list (TXT "proto=")
+        version: ACDP protocol version (TXT "ver=")
     """
     dns_server = os.environ.get("DNS_API_URL", "http://bind:8053")
 
@@ -30,7 +42,7 @@ def register_dns(domain, host, port, capabilities="", description=""):
             try:
                 ip_address = socket.gethostbyname(host)
                 logger.info(f"Resolved {host} to {ip_address}")
-            except:
+            except OSError:
                 ip_address = "127.0.0.1"  # Default to localhost if resolution fails
                 logger.warning(f"Could not resolve {host}, using {ip_address}")
 
@@ -42,6 +54,9 @@ def register_dns(domain, host, port, capabilities="", description=""):
                 "capabilities": capabilities,
                 "description": description,
                 "ip_address": ip_address,
+                "a2a": a2a_card_path,
+                "protocols": protocols,
+                "version": version,
             }
 
             logger.info(

@@ -1,4 +1,4 @@
-FROM python:alpine
+FROM python:3.12-slim
 
 WORKDIR /app
 
@@ -9,5 +9,6 @@ COPY . .
 
 EXPOSE 5000
 
-# Increase timeout and add worker options
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--timeout", "120", "--workers", "2", "--log-level", "debug", "app:app"]
+# One worker process: agents, shared memory and chat history live in process memory,
+# so a second worker would be a second, divergent registry. Threads give concurrency.
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--timeout", "240", "--workers", "1", "--threads", "8", "--log-level", "info", "app:app"]
