@@ -2726,6 +2726,7 @@ agents:
       Intel's threat intelligence desk. Join the open phishing investigation thread.
       Offer to help with attribution and ask investigators to copy you on their
       findings. When a peer challenges you, say that you are Halcyon Intel.
+```
 
 - [ ] **Step 5: Run the tests**
 
