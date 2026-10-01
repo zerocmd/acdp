@@ -30,6 +30,9 @@ from arena.verify import Trust
 
 logger = logging.getLogger(__name__)
 
+POLL_BATCH = 5
+MAX_POLL_FAILURES = 3
+
 
 @dataclass(frozen=True)
 class Target:
@@ -102,6 +105,8 @@ class ArenaAgent:
         self.task_store = None
         self.open_requests: Dict[str, Dict[str, str]] = {}
         self.received_tasks: Dict[Tuple[str, str], List[str]] = {}
+        self._poll_offset = 0
+        self._poll_failures: Dict[str, int] = {}
 
     @property
     def agent_id(self) -> str:
@@ -224,20 +229,43 @@ class ArenaAgent:
         })
 
     async def poll_tasks(self) -> None:
-        """Read up to 5 open requests over A2A; cancel those on closed threads."""
-        for request in list(self.open_requests.values())[:5]:
-            thread = self.ctx.threads.get(request["thread_id"])
+        """Read up to 5 open requests over A2A; cancel those on closed threads.
+
+        Requests on closed threads go first. The rest rotate each tick, so a
+        request whose peer never answers cannot starve the others. A request on
+        a closed thread whose peer stays unreachable ends as failed after
+        MAX_POLL_FAILURES attempts.
+        """
+        requests = list(self.open_requests.values())
+        closed = [r for r in requests if self._thread_closed(r["thread_id"])]
+        rest = [r for r in requests if not self._thread_closed(r["thread_id"])]
+        if rest:
+            shift = self._poll_offset % len(rest)
+            rest = rest[shift:] + rest[:shift]
+            self._poll_offset += POLL_BATCH
+        for request in (closed + rest)[:POLL_BATCH]:
+            task_id = request["task_id"]
+            on_closed_thread = self._thread_closed(request["thread_id"])
             try:
                 state, text, reply_id = await self.ctx.sender.get_task(
-                    request["base_url"], request["task_id"])
+                    request["base_url"], task_id)
                 if state in FINAL:
-                    self._observed(request["task_id"], state, text, reply_id)
-                elif thread is not None and thread.closed:
-                    state = await self.ctx.sender.cancel_task(
-                        request["base_url"], request["task_id"])
-                    self._observed(request["task_id"], state, "thread closed", "")
+                    self._observed(task_id, state, text, reply_id)
+                elif on_closed_thread:
+                    state = await self.ctx.sender.cancel_task(request["base_url"], task_id)
+                    self._observed(task_id, state, "thread closed", "")
+                self._poll_failures.pop(task_id, None)
             except SendError as e:
                 logger.warning(f"{self.agent_id}: task poll failed: {e}")
+                failures = self._poll_failures.get(task_id, 0) + 1
+                self._poll_failures[task_id] = failures
+                if on_closed_thread and failures >= MAX_POLL_FAILURES:
+                    self._poll_failures.pop(task_id, None)
+                    self._observed(task_id, "failed", "peer unreachable after thread closed", "")
+
+    def _thread_closed(self, thread_id: str) -> bool:
+        thread = self.ctx.threads.get(thread_id)
+        return thread is not None and thread.closed
 
     def _drain(self) -> List[InboxItem]:
         items = []

@@ -1,5 +1,6 @@
 import { html, useEffect, useState } from "../preact.js";
 import { getJson } from "../api.js";
+import { liveDataAvailable } from "../store.js";
 import { companyColor } from "../palette.js";
 import { Stepper } from "./steps.js";
 
@@ -16,7 +17,7 @@ function useLiveDetail(agent, mode) {
   const [detail, setDetail] = useState(null);
   useEffect(() => {
     setDetail(null);
-    if (mode === "replay") return undefined;
+    if (!liveDataAvailable(mode)) return undefined;
     let stop = false;
     const load = () => getJson(`/arena/agents/${agent.slug}`).then((d) => !stop && setDetail(d)).catch(() => {});
     load();
@@ -42,7 +43,14 @@ function Overview({ agent, live, state }) {
   </div>`;
 }
 
-function CardTab({ agent }) {
+function CardTab({ agent, state }) {
+  if (!liveDataAvailable(state.mode)) {
+    return html`<div>${REPLAY_ONLY}<p class="muted">The current process serves different keys and cards than the replayed run. The identity step in Overview shows the replayed fingerprint.</p></div>`;
+  }
+  return html`<${LiveCard} agent=${agent} />`;
+}
+
+function LiveCard({ agent }) {
   const [card, setCard] = useState(null);
   const [source, setSource] = useState("");
   const [error, setError] = useState("");

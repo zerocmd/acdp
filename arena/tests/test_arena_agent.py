@@ -320,3 +320,57 @@ def test_discovery_result_without_verification_is_unknown():
     agent, ctx, _, _ = make_agent(lambda p: {"action": "wait"}, ctx=make_ctx(acdp=acdp))
     asyncio.run(agent.tick())
     assert queries(ctx)[-1]["results"][0]["status"] == "unknown"
+
+
+class PollingSender(FakeSender):
+    """Records task polls; tasks listed in `down` raise SendError on every call."""
+
+    def __init__(self, down=()):
+        super().__init__()
+        self.down = set(down)
+        self.polled = []
+
+    async def get_task(self, base_url, task_id):
+        from arena.transport import SendError
+        self.polled.append(task_id)
+        if task_id in self.down:
+            raise SendError("peer unreachable")
+        return "working", "", ""
+
+    async def cancel_task(self, base_url, task_id):
+        from arena.transport import SendError
+        if task_id in self.down:
+            raise SendError("peer unreachable")
+        return "canceled"
+
+
+def open_requests(agent, count, thread_id="t1"):
+    for i in range(count):
+        agent.open_requests[f"k{i}"] = {"task_id": f"k{i}", "recipient": PEER_ID,
+                                        "thread_id": thread_id, "message_id": f"m{i}",
+                                        "base_url": "http://arena:8080/agents/halcyon-intel/"}
+
+
+def test_polling_rotates_so_no_open_request_starves():
+    sender = PollingSender(down={"k0"})
+    agent, ctx, _, _ = make_agent(lambda p: {"action": "wait"}, ctx=make_ctx(sender=sender))
+    ctx.threads.open(agent.agent_id, "case")
+    open_requests(agent, 7)
+    for _ in range(3):
+        asyncio.run(agent.poll_tasks())
+    assert set(sender.polled) == {f"k{i}" for i in range(7)}
+    assert "k0" in agent.open_requests  # a failed poll keeps the request open
+
+
+def test_closed_thread_request_with_unreachable_peer_ends_as_failed():
+    sender = PollingSender(down={"k0"})
+    agent, ctx, _, _ = make_agent(lambda p: {"action": "wait"}, ctx=make_ctx(sender=sender))
+    thread = ctx.threads.open(agent.agent_id, "case")
+    open_requests(agent, 1)
+    thread.closed = True
+    for _ in range(3):
+        asyncio.run(agent.poll_tasks())
+    updates = [e["data"] for e in ctx.bus.history if e["type"] == "task.updated"]
+    assert updates == [{"task_id": "k0", "state": "failed", "artifact": "",
+                        "reason": "peer unreachable after thread closed", "reply_id": ""}]
+    assert agent.open_requests == {}

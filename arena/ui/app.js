@@ -78,7 +78,7 @@ function App() {
       <${Sidebar} store=${store} state=${state} />
       <main class="wb-center">
         <${ViewSwitch} store=${store} state=${state} views=${VIEWS} />
-        <div class="view"><${View} store=${store} state=${state} /></div>
+        <div class="view"><${View} key=${`${state.selection.view}:${state.generation}`} store=${store} state=${state} /></div>
         <div class="timeline-slot">${Timeline ? html`<${Timeline} store=${store} state=${state} />` : null}</div>
         <${Legend} />
       </main>

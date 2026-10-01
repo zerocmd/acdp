@@ -28,7 +28,7 @@ function initialSelection() {
 
 export function initialState() {
   return {
-    mode: "connecting", runId: "", log: "", stopReason: "", paused: false,
+    mode: "connecting", runId: "", log: "", stopReason: "", paused: false, generation: 0,
     lastSeq: -1, unknown: 0,
     agents: {}, order: [], threads: {}, threadOrder: [], messages: [],
     trustByMessage: {}, tasks: {}, taskByMessage: {}, timeline: [],
@@ -102,6 +102,8 @@ export function apply(state, event) {
     next.mode = "replay";
     next.log = d.log || "";
     next.lastSeq = seq;
+    // Views that keep their own state (Network) remount when this changes.
+    next.generation = state.generation + 1;
     next.selection = { ...initialSelection(), view: state.selection.view };
     return next;
   }
@@ -273,6 +275,12 @@ export function agentsByCompany(state) {
   return [...groups.values()];
 }
 
+// Live-only data (live card, pending inbox, agent state) comes from running
+// agents. A replay shows a past run, so the current agents do not match it.
+export function liveDataAvailable(mode) {
+  return mode === "live" || mode === "stopped";
+}
+
 export function createStore() {
   let state = initialState();
   const subscribers = new Set();
@@ -282,7 +290,9 @@ export function createStore() {
     dispatch(event) { state = apply(state, event); notify(); },
     reset() {
       const view = state.selection.view;
+      const generation = state.generation + 1;
       state = initialState();
+      state.generation = generation;
       state.selection.view = view;
       notify();
     },

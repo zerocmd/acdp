@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { apply, chatItems, createStore, HANDLED, initialState, select } from "../store.js";
+import { apply, chatItems, createStore, HANDLED, initialState, liveDataAvailable, select } from "../store.js";
 
 let seq = 0;
 const ev = (type, data, ts = 1000 + seq) => ({ seq: seq++, ts, run_id: "r", type, data });
@@ -141,4 +141,21 @@ test("task updates keep the reply id", () => {
     ev("task.updated", { task_id: "k2", state: "completed", artifact: "x", reason: "", reply_id: "m2" }),
   ]);
   assert.equal(s.tasks.k2.replyId, "m2");
+});
+
+test("generation increases on bus.reset and store reset", () => {
+  const s0 = initialState();
+  const s1 = apply(s0, ev("bus.reset", { run_id: "x", log: "x" }));
+  assert.equal(s1.generation, s0.generation + 1);
+  const store = createStore();
+  const before = store.get().generation;
+  store.reset();
+  assert.equal(store.get().generation, before + 1);
+});
+
+test("live data is available only in live and stopped modes", () => {
+  assert.equal(liveDataAvailable("live"), true);
+  assert.equal(liveDataAvailable("stopped"), true);
+  assert.equal(liveDataAvailable("replay"), false);
+  assert.equal(liveDataAvailable("idle"), false);
 });
