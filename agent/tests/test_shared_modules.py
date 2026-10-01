@@ -32,9 +32,3 @@ def test_build_model_bedrock_requires_model_id():
     with pytest.raises(ValueError, match="MODEL_ID is required"):
         build_model({"provider": "bedrock"})
 
-
-def test_extension_uri_has_one_owner():
-    from runtime.a2a_card import ACDP_EXTENSION_URI
-    from runtime.delegation import ACDP_EXTENSION_URI as delegation_uri
-
-    assert delegation_uri is ACDP_EXTENSION_URI

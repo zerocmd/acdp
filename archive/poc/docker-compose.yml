@@ -1,0 +1,136 @@
+# Shared agent settings. Each agent overrides identity and capabilities.
+x-agent: &agent
+  build:
+    context: ./agent
+    dockerfile: DockerFile
+  depends_on:
+    registry:
+      condition: service_healthy
+    bind:
+      condition: service_started
+  networks:
+    - agent_network
+
+x-agent-env: &agent-env
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+  # anthropic (default) or bedrock. For bedrock set MODEL_ID and AWS credentials/region.
+  MODEL_PROVIDER: ${MODEL_PROVIDER:-anthropic}
+  MODEL_ID: ${MODEL_ID:-claude-sonnet-5-5}
+  # auto: the model decides when to consult peers; always: consult at least one; off: never
+  COLLABORATION_MODE: ${COLLABORATION_MODE:-auto}
+  ACDP_MAX_DELEGATION_DEPTH: ${ACDP_MAX_DELEGATION_DEPTH:-2}
+  ACDP_MAX_PEER_CALLS: ${ACDP_MAX_PEER_CALLS:-4}
+  # Set to require a shared bearer token on A2A JSON-RPC, /assist, POST /memory and /gossip/*.
+  ACDP_A2A_TOKEN: ${ACDP_A2A_TOKEN:-}
+  AGENT_PORT: "8000"
+  REGISTRY_URL: http://registry:5000
+  DNS_API_URL: http://bind:8053
+
+services:
+  # DNS Server
+  bind:
+    build:
+      context: ./dns
+      dockerfile: DockerFile
+    ports:
+      - "53:53/udp"
+      - "53:53/tcp"
+      - "8053:8053"
+    volumes:
+      - bind_data:/var/cache/bind
+      - bind_logs:/var/log/named
+    networks:
+      - agent_network
+
+  # Central Registry
+  registry:
+    build:
+      context: ./registry
+      dockerfile: DockerFile
+    ports:
+      - "5001:5000"
+    depends_on:
+      - bind
+    networks:
+      - agent_network
+    volumes:
+      - ./registry/static:/app/static
+      - ./registry/templates:/app/templates
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health', timeout=4)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Agent 1
+  agent1:
+    <<: *agent
+    ports:
+      - "8001:8000"
+    environment:
+      <<: *agent-env
+      AGENT_ID: agent1.agents.local
+      AGENT_NAME: Agent Alpha
+      AGENT_CAPABILITIES: chat,summarization,translation,orchestration
+      AGENT_DESCRIPTION: General AI assistant with agent orchestration capability
+      AGENT_HOSTNAME: agent1.agents.local
+
+  # Agent 2
+  agent2:
+    <<: *agent
+    ports:
+      - "8002:8000"
+    environment:
+      <<: *agent-env
+      AGENT_ID: agent2.agents.local
+      AGENT_NAME: Agent Beta
+      AGENT_CAPABILITIES: data_analysis,statistics,visualization
+      AGENT_DESCRIPTION: AI assistant specializing in data analysis, statistics, and visualization
+      AGENT_HOSTNAME: agent2.agents.local
+
+  # Agent 0
+  agent0:
+    <<: *agent
+    ports:
+      - "8003:8000"
+    environment:
+      <<: *agent-env
+      AGENT_ID: agent0.agents.local
+      AGENT_NAME: Agent Zero
+      AGENT_CAPABILITIES: machine_learning,log_analysis,security_operations
+      AGENT_DESCRIPTION: Specialized AI assistant for security investigation
+      AGENT_HOSTNAME: agent0.agents.local
+
+  # Agent 4
+  agent4:
+    <<: *agent
+    ports:
+      - "8004:8000"
+    environment:
+      <<: *agent-env
+      AGENT_ID: agent4.agents.local
+      AGENT_NAME: Agent Gamma
+      AGENT_CAPABILITIES: cybersecurity,incident_response,log_analysis
+      AGENT_DESCRIPTION: AI assistant specializing in cybersecurity and incident response
+      AGENT_HOSTNAME: agent4.agents.local
+
+  # Agent 3
+  agent3:
+    <<: *agent
+    ports:
+      - "8005:8000"
+    environment:
+      <<: *agent-env
+      AGENT_ID: agent3.agents.local
+      AGENT_NAME: Agent Delta
+      AGENT_CAPABILITIES: security,threat_detection,attack_patterns,response,log_analysis
+      AGENT_DESCRIPTION: AI assistant specializing in security analysis and threat detection
+      AGENT_HOSTNAME: agent3.agents.local
+
+networks:
+  agent_network:
+    driver: bridge
+
+volumes:
+  bind_data:
+  bind_logs:
