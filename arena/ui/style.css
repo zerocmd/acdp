@@ -131,3 +131,21 @@ code.txt { display: inline-block; margin: 1px 4px 1px 0; }
 
 .overlay { position: absolute; top: 8px; right: 8px; background: var(--panel); border: 1px solid var(--line);
   border-radius: 6px; padding: 2px 8px; font-size: 12px; z-index: 2; }
+
+.sequence { display: block; }
+.lane { cursor: pointer; }
+.lane-name { font-size: 12px; font-weight: 600; text-anchor: middle; fill: var(--text); }
+.lane-name.failed { fill: var(--bad); }
+.lane-org { font-size: 10px; text-anchor: middle; }
+.lane-axis { stroke: var(--line); stroke-dasharray: 3 3; }
+.seq-line { stroke-width: 1.6; }
+.seq-line.bad { stroke: var(--bad); } .seq-line.verdict { stroke: var(--ok); stroke-width: 3; }
+.seq-line.dashed { stroke-dasharray: 5 3; }
+.arrowhead.normal { fill: var(--muted); } .arrowhead.bad { fill: var(--bad); } .arrowhead.verdict { fill: var(--ok); }
+.seq-label { font-size: 10px; text-anchor: middle; fill: var(--muted); }
+.seq-msg { cursor: pointer; }
+.seq-marker.discover { fill: var(--search); } .seq-marker.verify { fill: var(--ok); }
+.seq-marker.failed { fill: var(--bad); }
+.bracket { fill: none; stroke-width: 2; }
+.bracket.working { stroke: var(--pending); } .bracket.completed { stroke: var(--ok); }
+.bracket.rejected, .bracket.canceled, .bracket.failed { stroke: var(--bad); }

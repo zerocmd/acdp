@@ -8,6 +8,7 @@ import { Legend } from "./components/legend.js";
 import { AddAgent } from "./components/addagent.js";
 import { Chat } from "./components/chat.js";
 import { NetworkView } from "./views/network.js";
+import { SequenceView } from "./views/sequence.js";
 import { Timeline } from "./components/timeline.js";
 import { Drawer } from "./components/drawer.js";
 import { RegistryView } from "./components/registry.js";
@@ -17,6 +18,7 @@ const store = createStore();
 // Tasks 10, 13, 14, and 15 add entries.
 export const VIEWS = {
   network: ["Network", NetworkView],
+  sequence: ["Sequence", SequenceView],
   registry: ["Registry", RegistryView],
 };
 
