@@ -16,6 +16,7 @@ from arena.bus import EventBus
 from arena.identity import fingerprint_jwk
 from arena.rate import RunGuard, TokenBucket
 from arena.threads import ThreadRegistry
+from arena.transport import SendError, SendResult
 from arena.verify import VERIFIED
 from runtime.a2a_card import card_acdp_params
 
@@ -145,13 +146,11 @@ class FakeSender:
         self.sent: List[Any] = []
 
     async def send(self, base_url, message):
-        from arena.transport import SendError
-
         if self.failures:
             self.failures -= 1
             raise SendError("peer down")
         self.sent.append((base_url, message))
-        return f"ack {message.id} verified"
+        return SendResult(f"ack {message.id} verified", None)
 
 
 class FixedVerifier:

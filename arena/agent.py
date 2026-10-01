@@ -98,6 +98,7 @@ class ArenaAgent:
         self.seen: Dict[str, Set[str]] = {}
         self.dns: Dict[str, Any] = {}
         self.verification: Dict[str, Any] = {"status": "pending", "reasons": []}
+        self.task_store = None
 
     @property
     def agent_id(self) -> str:
@@ -172,7 +173,7 @@ class ArenaAgent:
             self.counters["rejected"] += 1
         self.ctx.bus.publish("decision.made", record)
 
-    async def receive(self, message: ArenaMessage) -> Trust:
+    async def receive(self, message: ArenaMessage, task_id: Optional[str] = None) -> Trust:
         """Verify an inbound message and queue it. No model call."""
         if message.to_id != self.agent_id:
             trust = Trust("failed", "wrong recipient")

@@ -26,7 +26,7 @@ SPEC = AgentSpec.from_dict({
 def host_with_inbox():
     delivered = []
 
-    async def deliver(message):
+    async def deliver(message, task_id=None):
         delivered.append(message)
         return Trust("verified")
 
@@ -50,18 +50,18 @@ def message():
 def test_sender_delivers_envelope_and_returns_ack():
     delivered, sender = host_with_inbox()
     reply = asyncio.run(sender.send(agent_base_url(BASE, SPEC.slug), message()))
-    assert reply == "ack m1 verified"
+    assert reply.text == "ack m1 verified"
     assert delivered == [message()]
 
 
 def test_executor_rejects_missing_and_malformed_envelope():
     delivered, sender = host_with_inbox()
     base = agent_base_url(BASE, SPEC.slug)
-    assert asyncio.run(sender.send_raw(base, None, "hi")) == "rejected: missing arena envelope"
+    assert asyncio.run(sender.send_raw(base, None, "hi")).text == "rejected: missing arena envelope"
     bad = {"arena": {"id": 1}}
-    assert asyncio.run(sender.send_raw(base, bad, "hi")) == "rejected: invalid envelope"
+    assert asyncio.run(sender.send_raw(base, bad, "hi")).text == "rejected: invalid envelope"
     assert delivered == []
-    assert asyncio.run(sender.send(base, message())) == "ack m1 verified"
+    assert asyncio.run(sender.send(base, message())).text == "ack m1 verified"
 
 
 def test_unreachable_peer_raises_send_error():

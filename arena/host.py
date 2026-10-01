@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Mapping, Optional, Set
 
 import httpx
+from a2a.server.tasks import InMemoryTaskStore
 from fastapi import FastAPI
 from strands import Agent
 from strands.models import Model
@@ -165,8 +166,10 @@ class Arena:
             self.model_factory(spec.model, spec.slug),
             self.ctx,
         )
+        store = InMemoryTaskStore()
+        agent.task_store = store
         self.app.mount(
-            f"/agents/{spec.slug}", build_a2a_app(card, InboxExecutor(agent.receive))
+            f"/agents/{spec.slug}", build_a2a_app(card, InboxExecutor(agent.receive), store)
         )
         self.agents[spec.slug] = agent
         agent_id = identity.agent_id
