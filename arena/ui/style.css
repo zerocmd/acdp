@@ -128,3 +128,6 @@ code.txt { display: inline-block; margin: 1px 4px 1px 0; }
 .chip.task.working { background: var(--pending); color: #000; }
 .chip.task.completed { background: var(--ok); color: #fff; }
 .chip.task.rejected, .chip.task.canceled, .chip.task.failed { background: var(--bad); color: #fff; }
+
+.overlay { position: absolute; top: 8px; right: 8px; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 6px; padding: 2px 8px; font-size: 12px; z-index: 2; }
