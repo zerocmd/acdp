@@ -118,6 +118,11 @@ def test_add_zone_script_is_idempotent(tmp_path):
     calls = log.read_text().splitlines()
     assert len(calls) == 1
     assert calls[0].startswith("rndc addzone northgate.example")
+    # Only the DNS API inside the container may update records (it runs nsupdate
+    # against localhost). Port 53 is published, so "any" would let other hosts
+    # rewrite key pins.
+    assert "allow-update { 127.0.0.1; ::1; }" in calls[0]
+    assert "any" not in calls[0]
 
 
 @pytest.mark.skipif(shutil.which("bash") is None, reason="bash required")

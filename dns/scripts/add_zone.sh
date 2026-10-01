@@ -20,7 +20,7 @@ ns      IN      A       127.0.0.1
 ZONE_EOF
 chown bind:bind "$ZONE_DIR" "$FILE" 2>/dev/null || true
 
-if ! rndc addzone "$ZONE" "{ type primary; file \"$FILE\"; allow-update { any; }; };"; then
+if ! rndc addzone "$ZONE" "{ type primary; file \"$FILE\"; allow-update { 127.0.0.1; ::1; }; };"; then
     rm -f "$FILE"
     exit 1
 fi
