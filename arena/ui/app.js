@@ -9,15 +9,15 @@ import { AddAgent } from "./components/addagent.js";
 import { Chat } from "./components/chat.js";
 import { NetworkView } from "./views/network.js";
 import { Timeline } from "./components/timeline.js";
+import { Drawer } from "./components/drawer.js";
 
 const store = createStore();
 
 // Tasks 10, 13, 14, and 15 add entries.
 export const VIEWS = { network: ["Network", NetworkView] };
 
-// Task 9 shows the drawer when an agent is selected.
 export function RIGHT(state) {
-  return Chat;
+  return state.selection.agent && state.agents[state.selection.agent] ? Drawer : Chat;
 }
 
 export function TIMELINE() {

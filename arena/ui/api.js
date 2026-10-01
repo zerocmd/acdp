@@ -2,7 +2,8 @@
 async function parse(response) {
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const detail = body.error || (body.detail && JSON.stringify(body.detail)) || response.status;
+    const raw = body.error || body.detail;
+    const detail = typeof raw === "string" ? raw : raw ? JSON.stringify(raw) : response.status;
     throw new Error(String(detail));
   }
   return body;
