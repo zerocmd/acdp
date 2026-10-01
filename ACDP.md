@@ -1556,6 +1556,16 @@ Security is critical in an open discovery protocol to prevent abuse, impersonati
 
 **Peer Communications and Data Integrity:** Agents exchanging information (like peer lists or tasks) should validate the input. A malicious peer might send a list containing invalid or malicious addresses. Agents should apply sanity checks (e.g., ensure domain names are well-formed, maybe even do reverse lookups or registry cross-check if suspicious). If an agent receives metadata from a peer about a third agent, it’s generally better to retrieve that third agent’s info directly (via DNS/HTTPS) rather than trust it blindly. In other words, gossip should be used to learn who is out there, but the authoritative data about that agent should come from the agent itself or the registry (to avoid tampering). This principle limits how much harm a malicious agent can do by spreading misinformation.
 
+### Key Pinning and Organization Anchors (arena implementation)
+
+The ACDP Agent Arena adds three checks to the reference implementation.
+
+- **Key pin in DNS.** The TXT record of an agent can carry `key=<fingerprint>`. The fingerprint is the base64url (no padding) SHA-256 of the raw Ed25519 public key. The Agent Card carries the same key as `publicKeyJwk` in the ACDP extension, with a `did:web` identifier.
+- **Registry verification.** At registration, the registry fetches the card from its advertised URL, resolves the TXT record, and compares the key fingerprint. It stores the result as `verification` (`verified` or `failed`, with reasons). The registry accepts failed registrations. Peers decide what to do with them.
+- **Organization anchor.** The registry maps each organization name to the domain that registered it first. A later registration of the same name under another domain gets `org_conflict`. Peers use this anchor to reject lookalike domains.
+
+Known gap: the organization anchor is first-registrant-wins. A registration race can claim an organization name. A production deployment needs a stronger anchor, for example DNSSEC-signed records or verifiable credentials.
+
 ## Mitigation of Attacks: Several potential attacks and mitigations are considered
 
 - **DNS Spoofing:** Agents should prefer DNSSEC-validated data. Additionally, using HTTPS to retrieve metadata ensures a second layer of authenticity (if an attacker spoofed a capability in DNS, the actual metadata fetched over HTTPS from the real agent would likely not confirm that spoofed capability).
