@@ -65,3 +65,12 @@ dialog form { display: flex; flex-direction: column; gap: 8px; }
 dialog label { display: flex; flex-direction: column; gap: 2px; }
 dialog .actions { display: flex; justify-content: flex-end; gap: 8px; }
 .error { color: var(--bad); }
+
+.timeline { width: 100%; height: 100%; display: block; user-select: none; }
+.lane-label { font-size: 11px; fill: var(--muted); }
+.lane-line { stroke: var(--line); }
+.tl-dot { cursor: pointer; }
+.tl-dot.register { fill: var(--ok); } .tl-dot.discover { fill: var(--search); }
+.tl-dot.verify { fill: var(--ok); } .tl-dot.message { fill: var(--accent); }
+.tl-dot.failed { fill: var(--bad); } .tl-dot.selected { stroke: var(--text); stroke-width: 1.5; }
+.range { fill: var(--accent); opacity: .12; }

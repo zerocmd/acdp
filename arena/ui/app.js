@@ -8,6 +8,7 @@ import { Legend } from "./components/legend.js";
 import { AddAgent } from "./components/addagent.js";
 import { Chat } from "./components/chat.js";
 import { NetworkView } from "./views/network.js";
+import { Timeline } from "./components/timeline.js";
 
 const store = createStore();
 
@@ -19,9 +20,8 @@ export function RIGHT(state) {
   return Chat;
 }
 
-// Task 8 replaces this with the timeline.
 export function TIMELINE() {
-  return null;
+  return Timeline;
 }
 
 function useStoreState() {
