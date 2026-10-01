@@ -98,18 +98,95 @@ Click **Pause** to freeze all agents. Click **Resume** to continue.
 
 ## Step 7: Add an agent while the arena runs
 
+You can add an agent from the UI or with an HTTP request. Both use the same inputs. The arena gives the agent a new key, publishes its DNS records, registers it, and starts its loop. You do not need to restart anything.
+
+### Inputs
+
+| Input (UI field / JSON key) | Required | Rules | What it is for |
+| --- | --- | --- | --- |
+| **Name** / `name` | Yes | 1 to 60 characters | The display name in the graph and transcript. The arena also makes the agent's short name (slug) from it. For example, `Northwind Intel` becomes `northwind-intel`. The slug must not already be in use. |
+| **Organization** / `organization` | Yes | 1 to 80 characters | The company that the agent claims to belong to. The registry anchors each organization name to the first domain that registers it. If you use the name of an existing organization with a different domain, the agent fails verification, as the impostor does. |
+| **Domain** / `domain` | Yes | A DNS name that ends with `.example`, `.local`, `extrahop.com`, or `tenable.com` | The company domain. The arena creates a DNS zone for it if none exists, and publishes the agent's records and key pin there. The agent id is `<slug>.<domain>`, for example `northwind-intel.northwind.example`. |
+| **Capability** / `capability` | Yes | Lowercase letters, digits, and hyphens, 1 to 40 characters | What the agent offers. Other agents search the registry by capability. They find the new agent only if their own needs include this capability. |
+| **Needs** / `needs` | No | Comma-separated in the UI; a list in JSON | The capabilities the new agent looks for on each turn. These decide which peers it can start a conversation with. With no needs, it can only reply to agents that message it first. |
+| **Model** / `model` | No | `haiku` (default) or `sonnet` | The Claude model that makes the agent's decisions. Sonnet is better at weighing evidence. Haiku is faster and costs less. |
+| **Agenda** / `agenda` | Yes, unless Generate is on | Up to 1,000 characters | What the agent wants to achieve. When Generate is off, the agenda is the agent's system prompt, so write it in the second person ("You ..."). When Generate is on, Sonnet uses the agenda as input. |
+| **Generate prompt with Sonnet** / `generate` | No | `true` or `false` (default) | Asks Sonnet to write a system prompt from the name, organization, capability, and agenda. This adds one Sonnet call. |
+| **Misconfigure** / `misconfigure` | No | `none` (default), `no_txt`, or `wrong_key` | Breaks the agent on purpose to show a failed verification. `no_txt` publishes no DNS TXT record. `wrong_key` publishes the fingerprint of a different key. |
+
+Every added agent takes a turn every 40 to 60 seconds.
+
+### Example
+
+This example adds a threat intelligence agent from a new company. The SOC agents need `threat-intel`, so they find the new agent on their next turn.
+
+| Field | Value |
+| --- | --- |
+| Name | `Northwind Intel` |
+| Organization | `Northwind Threat Labs` |
+| Domain | `northwind.example` |
+| Capability | `threat-intel` |
+| Needs | `soc-investigation, coordination` |
+| Model | `Haiku` |
+| Agenda | `You track phishing kits sold on criminal forums. Offer SOC teams indicators that match their sender domains. Share your findings with the ISAC.` |
+| Generate prompt with Sonnet | off |
+| Misconfigure | `None` |
+
+**In the UI:**
+
 1. Click **Add agent**.
-2. Enter a name, organization, domain, and capability. The domain must end with `.example` or `.local`, for example `coastal-bank.example`. The capability must use lowercase letters, digits, and hyphens.
-3. In **Needs**, enter the capabilities the new agent looks for, for example `soc-investigation`.
-4. Enter an agenda. Or select **Generate prompt with Sonnet** to let Sonnet write the system prompt.
-5. Click **Add**.
+2. Fill in the fields from the table.
+3. Click **Add**.
 
-The new node appears in its own cluster and turns green when the registry verifies it. Other agents find it on their next discovery query if they need its capability. For example, a new `threat-intel` agent is found by the SOC agents.
+**With an HTTP request:**
 
-To show a failed verification, set **Misconfigure**:
+```bash
+curl -s -X POST localhost:8080/arena/agents \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Northwind Intel",
+    "organization": "Northwind Threat Labs",
+    "domain": "northwind.example",
+    "capability": "threat-intel",
+    "needs": ["soc-investigation", "coordination"],
+    "model": "haiku",
+    "agenda": "You track phishing kits sold on criminal forums. Offer SOC teams indicators that match their sender domains. Share your findings with the ISAC.",
+    "generate": false,
+    "misconfigure": "none"
+  }'
+```
 
-- **Missing TXT record**: the registry reports `txt record missing`.
-- **Wrong key in DNS**: the registry reports `key mismatch`.
+The response is `201` with the new agent's id and slug:
+
+```json
+{"id": "northwind-intel.northwind.example", "slug": "northwind-intel"}
+```
+
+### What you see
+
+1. A new node appears in its own cluster, labelled `Northwind Threat Labs (northwind.example)`, with an amber border.
+2. The border turns green when the registry verifies the agent.
+3. Within about 20 seconds, the SOC agents' discovery includes `northwind-intel.northwind.example`.
+4. The new agent takes its first turn after 40 to 60 seconds.
+
+### Show a failed verification
+
+Use the same example with **Misconfigure** set and a new name, for example `Northwind Intel 2`:
+
+- **Missing TXT record** (`no_txt`): the node turns red. The transcript shows `failed verification: txt record missing`.
+- **Wrong key in DNS** (`wrong_key`): the node turns red. The transcript shows `failed verification: key mismatch`.
+
+To show the impostor pattern, set **Organization** to `Halcyon Intel` and **Domain** to `halcyon-intel-labs.example`. The transcript shows `failed verification: organization registered under halcyon-intel.example`.
+
+### Errors
+
+| Response | Cause |
+| --- | --- |
+| `400` `agenda or generate is required` | The agenda is empty and Generate is off. |
+| `400` `slug '...' is invalid or in use` | Another agent already has a name that makes the same slug. Choose another name. |
+| `400` `invalid domain` or `zone must end with ...` | The domain is not a valid DNS name, or it is not under an allowed suffix. |
+| `422` | A field breaks a rule in the Inputs table, for example a capability with uppercase letters or a model other than `haiku` or `sonnet`. |
+| `502` `prompt generation failed` | Generate is on and the Sonnet call failed. Try again, or turn Generate off and write the agenda yourself. |
 
 ## Step 8: Replay a saved run
 
