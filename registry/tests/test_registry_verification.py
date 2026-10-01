@@ -191,3 +191,9 @@ def test_client_supplied_verification_is_dropped(client):
     body["verification"] = {"status": "verified"}
     stored = client.post("/registerAgent", json=body).get_json()["agent"]
     assert "verification" not in stored
+
+
+def test_orgs_list_endpoint(client):
+    client.post("/registerAgent", json=registration())
+    assert client.get("/orgs").get_json() == {"orgs": [
+        {"organization": "Halcyon Intel", "canonical_domain": "halcyon-intel.example"}]}

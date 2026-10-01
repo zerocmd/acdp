@@ -70,6 +70,10 @@ class OrgDirectory:
     def get(self, normalized: str) -> Optional[Dict[str, str]]:
         return self._entries.get(normalized)
 
+    def all(self) -> List[Dict[str, str]]:
+        """Every organization and its canonical domain, sorted by name."""
+        return sorted(self._entries.values(), key=lambda e: e["organization"].lower())
+
     def clear(self) -> None:
         self._entries.clear()
 

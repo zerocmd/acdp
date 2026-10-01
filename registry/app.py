@@ -407,6 +407,12 @@ def update_shared_memory():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/orgs", methods=["GET"])
+def list_orgs():
+    """Every organization anchor (first registrant wins)."""
+    return jsonify({"orgs": orgs.all()})
+
+
 @app.route("/orgs/<normalized>", methods=["GET"])
 def get_org(normalized):
     """Canonical domain of an organization (first registrant wins)."""
