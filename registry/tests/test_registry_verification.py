@@ -172,3 +172,22 @@ def test_fetch_card_honours_host_allow_list_and_no_redirects(monkeypatch):
     assert registry_app.fetch_card(good) == {"name": "x"}
     assert seen == [(good, False)]
     assert registry_app.fetch_card("http://evil:8080/.well-known/agent-card.json") is None
+
+
+def test_card_must_belong_to_the_registering_id():
+    # An impostor points its card_url at the real Halcyon card and copies its key.
+    data = registration(domain="halcyon-inte1.example")
+    result = verification.verify_registration(
+        data, lambda url: card(), lambda name: [f"key={FP}"],
+        verification.OrgDirectory(),
+    )
+    assert result["status"] == "failed"
+    assert "card identity mismatch" in result["reasons"]
+
+
+def test_client_supplied_verification_is_dropped(client):
+    body = registration()
+    del body["agent_card"]
+    body["verification"] = {"status": "verified"}
+    stored = client.post("/registerAgent", json=body).get_json()["agent"]
+    assert "verification" not in stored

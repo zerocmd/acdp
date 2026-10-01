@@ -2,6 +2,9 @@
 
 import asyncio
 
+import pytest
+
+from arena.acdp import AcdpError
 from arena.card import build_card
 from arena.cast import AgentSpec
 from arena.envelope import ArenaMessage, Intent
@@ -30,7 +33,7 @@ def setup(organization="Halcyon Intel", domain="halcyon-intel.example", slug="ha
     return ident, card_json, message
 
 
-def verifier(card=None, dns=None, org=None):
+def verifier(card=None, dns=None, org=None, org_error=False):
     async def fetch_card(url):
         return card
 
@@ -38,6 +41,8 @@ def verifier(card=None, dns=None, org=None):
         return dns
 
     async def org_lookup(organization):
+        if org_error:
+            raise AcdpError("registry down")
         return org
 
     return Verifier(fetch_card, dns_lookup, org_lookup)
@@ -54,9 +59,47 @@ def test_verified():
     assert check(v, message) == Trust("verified")
 
 
-def test_unknown_org_is_not_a_failure():
+def test_unregistered_org_fails():
     ident, card, message = setup()
-    assert check(verifier(card, {"key": ident.fingerprint()}, None), message).status == "verified"
+    trust = check(verifier(card, {"key": ident.fingerprint()}, None), message)
+    assert trust == Trust("failed", "organization not registered")
+
+
+def test_registry_error_fails_closed():
+    ident, card, message = setup()
+    v = verifier(card, {"key": ident.fingerprint()}, org_error=True)
+    assert check(v, message) == Trust("failed", "registry unreachable")
+
+
+def params_of(card):
+    return card["capabilities"]["extensions"][0]["params"]
+
+
+def test_card_of_another_agent_is_rejected():
+    ident, card, message = setup()
+    forged = message.model_copy(update={"from_id": "halcyon-sales.halcyon-intel.example"})
+    v = verifier(card, {"key": ident.fingerprint()},
+                 {"canonical_domain": "halcyon-intel.example"})
+    assert check(v, forged) == Trust("failed", "sender mismatch")
+
+
+def test_card_domain_must_contain_the_agent_id():
+    # The impostor controls only halcyon-inte1.example but claims the real domain.
+    ident, card, message = setup(domain="halcyon-inte1.example", slug="lookalike-intel")
+    params_of(card)["domain"] = "halcyon-intel.example"
+    v = verifier(card, {"key": ident.fingerprint()},
+                 {"canonical_domain": "halcyon-intel.example"})
+    assert check(v, message) == Trust("failed", "card domain mismatch")
+
+
+def test_did_must_be_the_did_web_form_of_the_agent_id():
+    ident, card, message = setup()
+    fake_did = "did:web:other.example:agents:x"
+    params_of(card)["did"] = fake_did
+    resigned = message.model_copy(update={"from_did": fake_did}).signed(ident)
+    v = verifier(card, {"key": ident.fingerprint()},
+                 {"canonical_domain": "halcyon-intel.example"})
+    assert check(v, resigned) == Trust("failed", "did mismatch")
 
 
 def test_card_unreachable():

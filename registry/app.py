@@ -202,6 +202,9 @@ def register_agent():
         if not isinstance(data["capabilities"], list):
             return jsonify({"error": "capabilities must be a list"}), 400
 
+        # Only the registry sets verification. Drop any value the client sent.
+        data.pop("verification", None)
+
         # ACDP 1.1 agents include their A2A Agent Card; ACDP 1.0 agents do not.
         if "agent_card" in data:
             problem = _validate_card(data["agent_card"])

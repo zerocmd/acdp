@@ -111,12 +111,15 @@ class AcdpClient:
         return list(response.get("agents") or [])
 
     async def org(self, organization: str) -> Optional[Dict[str, Any]]:
-        """Canonical domain of an organization, or None."""
+        """Canonical domain of an organization, or None when it is not registered.
+
+        Raises:
+            AcdpError: The registry cannot be reached. Callers must fail closed.
+        """
         try:
             return await asyncio.to_thread(self.registry.get_org, organization)
         except requests.RequestException as e:
-            logger.warning(f"Organization lookup failed for {organization!r}: {e}")
-            return None
+            raise AcdpError(f"organization lookup failed: {e}") from e
 
     async def dns_agent(self, agent_id: str) -> Optional[Dict[str, Any]]:
         """SRV and TXT data for an agent id, with "key"."""

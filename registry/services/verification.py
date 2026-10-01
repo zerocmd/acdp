@@ -111,6 +111,11 @@ def verify_registration(
     if not card_fetched:
         reasons.append("card unreachable")
     params = acdp_params(fetched if card_fetched else data.get("agent_card") or {})
+    agent_id = str(data["id"])
+    card_id = str(params.get("id", ""))
+    card_domain = str(params.get("domain", ""))
+    if card_id != agent_id or not card_domain or not agent_id.endswith("." + card_domain):
+        reasons.append("card identity mismatch")
 
     txt = lookup_txt(data["id"])
     dns_found = txt is not None
@@ -125,7 +130,10 @@ def verify_registration(
     if org["conflict"]:
         reasons.append(f"organization registered under {org['canonical_domain']}")
 
-    verified = card_fetched and dns_found and key_matches and not org["conflict"]
+    verified = (
+        card_fetched and dns_found and key_matches and not org["conflict"]
+        and "card identity mismatch" not in reasons
+    )
     return {
         "status": "verified" if verified else "failed",
         "card_fetched": card_fetched,

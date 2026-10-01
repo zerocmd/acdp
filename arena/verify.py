@@ -2,10 +2,13 @@
 
 A message is verified only when all of these hold:
 1. The sender card is reachable.
-2. The card DID equals the message from_did.
-3. The signature matches the card key.
-4. DNS for the sender agent id publishes that key's fingerprint.
-5. The registry anchors the card organization to the card domain.
+2. The card is the sender's card: its id equals the message from_id, the id is a
+   name under the card domain, and the DID is the did:web form of that id.
+3. The DID equals the message from_did.
+4. The signature matches the card key.
+5. DNS for the sender agent id publishes that key's fingerprint.
+6. The registry anchors the card organization to the card domain. An unknown
+   organization or an unreachable registry fails the check.
 """
 
 from dataclasses import dataclass
@@ -13,6 +16,7 @@ from typing import Any, Awaitable, Callable, Dict, Optional
 
 from runtime.a2a_card import card_acdp_params
 
+from arena.acdp import AcdpError
 from arena.envelope import ArenaMessage
 from arena.identity import fingerprint_jwk, verify_signature
 
@@ -47,19 +51,32 @@ class Verifier:
         if not card:
             return Trust("failed", "card unreachable")
         params = card_acdp_params(card)
-        if params.get("did") != message.from_did:
+        agent_id = str(params.get("id", ""))
+        domain = str(params.get("domain", ""))
+        if agent_id != message.from_id:
+            return Trust("failed", "sender mismatch")
+        if not domain or not agent_id.endswith("." + domain):
+            return Trust("failed", "card domain mismatch")
+        slug = agent_id[: -len(domain) - 1]
+        expected_did = f"did:web:{domain}:agents:{slug}"
+        if params.get("did") != expected_did or message.from_did != expected_did:
             return Trust("failed", "did mismatch")
         jwk = params.get("publicKeyJwk") or {}
         if not verify_signature(message.payload(), jwk):
             return Trust("failed", "bad signature")
-        dns = await self.dns_lookup(str(params.get("id", "")))
+        dns = await self.dns_lookup(agent_id)
         try:
             expected = fingerprint_jwk(jwk)
         except (KeyError, ValueError):
             expected = None
         if not dns or not expected or dns.get("key") != expected:
             return Trust("failed", "key not in dns")
-        org = await self.org_lookup(str(params.get("organization", "")))
-        if org and org.get("canonical_domain") != params.get("domain"):
+        try:
+            org = await self.org_lookup(str(params.get("organization", "")))
+        except AcdpError:
+            return Trust("failed", "registry unreachable")
+        if not org:
+            return Trust("failed", "organization not registered")
+        if org.get("canonical_domain") != domain:
             return Trust("failed", "domain mismatch")
         return VERIFIED
