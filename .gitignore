@@ -186,3 +186,6 @@ runs/
 
 # Superpowers scratch (brainstorm screens, execution ledgers)
 .superpowers/
+
+# The Workbench UI keeps JS helpers in arena/ui/lib (not a Python lib/ build dir).
+!arena/ui/lib/
