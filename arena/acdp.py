@@ -1,0 +1,123 @@
+"""Async facade over the ACDP registry, the DNS API, and the DNS resolver."""
+
+import asyncio
+import logging
+from typing import Any, Callable, Dict, List, Optional
+
+import httpx
+import requests
+
+logger = logging.getLogger(__name__)
+
+
+class AcdpError(Exception):
+    """An ACDP service refused a request or could not be reached."""
+
+
+class AcdpClient:
+    """ACDP calls for the arena runtime.
+
+    Args:
+        dns_api_url: Base URL of the DNS update API.
+        registry: Shared RegistryClient (sync).
+        resolver: Shared DNSResolver (sync).
+        http_factory: Returns a new httpx.AsyncClient.
+        sleep: Async sleep (tests replace it).
+        register_attempts: Registry attempts before AcdpError.
+        retry_delay: Seconds between registry attempts.
+    """
+
+    def __init__(
+        self,
+        dns_api_url: str,
+        registry: Any,
+        resolver: Any,
+        http_factory: Callable[[], httpx.AsyncClient],
+        sleep: Callable[[float], Any] = asyncio.sleep,
+        register_attempts: int = 4,
+        retry_delay: float = 10.0,
+    ) -> None:
+        self.dns_api_url = dns_api_url.rstrip("/")
+        self.registry = registry
+        self.resolver = resolver
+        self.http_factory = http_factory
+        self.sleep = sleep
+        self.register_attempts = register_attempts
+        self.retry_delay = retry_delay
+
+    async def _post_dns(self, path: str, body: Dict[str, Any]) -> Dict[str, Any]:
+        async with self.http_factory() as http:
+            try:
+                response = await http.post(f"{self.dns_api_url}{path}", json=body)
+            except httpx.HTTPError as e:
+                raise AcdpError(f"DNS API unreachable: {e}") from e
+        try:
+            result = response.json()
+        except ValueError:
+            result = {}
+        if response.status_code != 200:
+            raise AcdpError(result.get("message") or f"DNS API returned {response.status_code}")
+        return result
+
+    async def create_zone(self, zone: str) -> str:
+        """Create the zone if it does not exist. Returns "created" or "exists"."""
+        result = await self._post_dns("/zones", {"zone": zone})
+        return str(result.get("result", ""))
+
+    async def publish_dns(
+        self,
+        *,
+        agent_id: str,
+        host: str,
+        port: int,
+        capability: str,
+        description: str,
+        card_path: str,
+        key: str,
+    ) -> None:
+        """Write the agent's SRV and TXT records."""
+        await self._post_dns(
+            "/update_dns",
+            {
+                "domain": agent_id,
+                "host": host,
+                "port": port,
+                "capabilities": capability,
+                "description": description[:200],
+                "a2a": card_path,
+                "protocols": "a2a/0.3",
+                "version": "1.1",
+                "key": key,
+            },
+        )
+
+    async def register(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Register with the registry. Returns the stored entry."""
+        last_error: Optional[Exception] = None
+        for attempt in range(self.register_attempts):
+            try:
+                response = await asyncio.to_thread(self.registry.register_agent, payload)
+                return response["agent"]
+            except requests.RequestException as e:
+                last_error = e
+                logger.warning(f"Registry attempt {attempt + 1} failed: {e}")
+                if attempt < self.register_attempts - 1:
+                    await self.sleep(self.retry_delay)
+        raise AcdpError(f"registry unreachable: {last_error}")
+
+    async def find(self, capability: str) -> List[Dict[str, Any]]:
+        """Registry entries that offer the capability."""
+        response = await asyncio.to_thread(self.registry.get_agents, capability=capability)
+        return list(response.get("agents") or [])
+
+    async def org(self, organization: str) -> Optional[Dict[str, Any]]:
+        """Canonical domain of an organization, or None."""
+        try:
+            return await asyncio.to_thread(self.registry.get_org, organization)
+        except requests.RequestException as e:
+            logger.warning(f"Organization lookup failed for {organization!r}: {e}")
+            return None
+
+    async def dns_agent(self, agent_id: str) -> Optional[Dict[str, Any]]:
+        """SRV and TXT data for an agent id, with "key"."""
+        return await asyncio.to_thread(self.resolver.resolve_agent, agent_id)
