@@ -134,3 +134,41 @@ def test_orgs_endpoint(client):
     assert body == {"organization": "Halcyon Intel",
                     "canonical_domain": "halcyon-intel.example"}
     assert client.get("/orgs/nobody").status_code == 404
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://bind:8053/zones",
+        "file:///etc/passwd",
+        "http://metadata.internal/latest/meta-data/",
+        None,
+    ],
+)
+def test_fetch_card_refuses_non_card_urls(monkeypatch, url):
+    calls = []
+    monkeypatch.setattr(registry_app.requests, "get", lambda *a, **k: calls.append(a))
+    assert registry_app.fetch_card(url) is None
+    assert calls == []
+
+
+def test_fetch_card_honours_host_allow_list_and_no_redirects(monkeypatch):
+    seen = []
+
+    class Response:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"name": "x"}
+
+    def fake_get(url, timeout, allow_redirects):
+        seen.append((url, allow_redirects))
+        return Response()
+
+    monkeypatch.setattr(registry_app.requests, "get", fake_get)
+    monkeypatch.setattr(registry_app, "CARD_HOSTS", {"arena"})
+    good = "http://arena:8080/agents/x/.well-known/agent-card.json"
+    assert registry_app.fetch_card(good) == {"name": "x"}
+    assert seen == [(good, False)]
+    assert registry_app.fetch_card("http://evil:8080/.well-known/agent-card.json") is None

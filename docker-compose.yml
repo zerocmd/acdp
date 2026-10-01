@@ -23,6 +23,7 @@ services:
       dockerfile: DockerFile
     environment:
       DNS_SERVER: bind
+      REGISTRY_CARD_HOSTS: arena
     ports:
       - "5001:5000"
     depends_on:

@@ -33,14 +33,28 @@ agent_chats = {}
 search_service = SearchService(agents)
 orgs = OrgDirectory()
 DNS_SERVER = os.environ.get("DNS_SERVER", "bind")
+CARD_PATH_SUFFIX = "/.well-known/agent-card.json"
+# Hosts the registry may fetch cards from. Empty means any host (local development).
+CARD_HOSTS = {
+    h.strip().lower() for h in os.environ.get("REGISTRY_CARD_HOSTS", "").split(",") if h.strip()
+}
 
 
 def fetch_card(url):
-    """Fetch an Agent Card for verification. Returns None on any fetch failure."""
-    if not isinstance(url, str) or urllib.parse.urlparse(url).scheme not in ("http", "https"):
+    """Fetch an Agent Card for verification. Returns None on any fetch failure.
+
+    The URL comes from the registrant, so the registry fetches only card paths,
+    only from allowed hosts, and does not follow redirects.
+    """
+    if not isinstance(url, str):
+        return None
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.path.endswith(CARD_PATH_SUFFIX):
+        return None
+    if CARD_HOSTS and (parsed.hostname or "").lower() not in CARD_HOSTS:
         return None
     try:
-        response = requests.get(url, timeout=5)
+        response = requests.get(url, timeout=5, allow_redirects=False)
         response.raise_for_status()
         body = response.json()
     except (requests.RequestException, ValueError):
