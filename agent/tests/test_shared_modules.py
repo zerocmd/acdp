@@ -32,3 +32,48 @@ def test_build_model_bedrock_requires_model_id():
     with pytest.raises(ValueError, match="MODEL_ID is required"):
         build_model({"provider": "bedrock"})
 
+
+
+def test_dns_resolver_reads_key_field(monkeypatch):
+    from discovery.dns_resolver import DNSResolver
+
+    resolver = DNSResolver(dns_server="127.0.0.1")
+    monkeypatch.setattr(resolver, "_get_srv_record", lambda d: ("arena", 8080))
+    monkeypatch.setattr(
+        resolver,
+        "_get_txt_record",
+        lambda d: ["ver=1.1", "caps=threat-intel", "a2a=/agents/x/card", "key=abc"],
+    )
+    info = resolver.resolve_agent("x.halcyon-intel.example")
+    assert info["key"] == "abc"
+    assert info["capabilities"] == ["threat-intel"]
+
+
+def test_registry_client_get_org(monkeypatch):
+    from discovery import registry_client as rc
+
+    calls = []
+
+    class Response:
+        def __init__(self, status, body):
+            self.status_code, self._body = status, body
+
+        def json(self):
+            return self._body
+
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                raise rc.requests.HTTPError(str(self.status_code))
+
+    def fake_get(url, timeout):
+        calls.append(url)
+        if url.endswith("/orgs/halcyonintel"):
+            return Response(200, {"organization": "Halcyon Intel",
+                                  "canonical_domain": "halcyon-intel.example"})
+        return Response(404, {"error": "not found"})
+
+    monkeypatch.setattr(rc.requests, "get", fake_get)
+    client = rc.RegistryClient("http://registry:5000")
+    assert client.get_org("Halcyon Intel")["canonical_domain"] == "halcyon-intel.example"
+    assert client.get_org("Nobody Inc") is None
+    assert calls[0] == "http://registry:5000/orgs/halcyonintel"

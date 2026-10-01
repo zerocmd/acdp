@@ -1,5 +1,6 @@
 """Client for interacting with the central registry."""
 
+import re
 import requests
 import logging
 import json
@@ -205,6 +206,24 @@ class RegistryClient:
 
     # Local cache for shared memory since registry may not persist between requests
     _memory_cache = {"memory": {}}
+
+    def get_org(self, organization: str) -> Optional[Dict]:
+        """Return the registry's canonical domain for an organization.
+
+        Args:
+            organization: Organization name as written on an Agent Card.
+
+        Returns:
+            {"organization", "canonical_domain"}, or None if the registry has no entry.
+        """
+        normalized = re.sub(r"[^a-z0-9]", "", organization.lower())
+        if not normalized:
+            return None
+        response = requests.get(f"{self.base_url}/orgs/{normalized}", timeout=10)
+        if response.status_code == 404:
+            return None
+        response.raise_for_status()
+        return response.json()
 
     def get_shared_memory(self) -> Dict:
         """

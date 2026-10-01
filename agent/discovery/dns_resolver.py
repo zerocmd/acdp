@@ -70,6 +70,7 @@ class DNSResolver:
             version = "1.0"
             protocols = []
             card_path = None
+            key = ""
 
             if txt_record:
                 # Parse TXT record data
@@ -85,6 +86,9 @@ class DNSResolver:
                     elif item.startswith("a2a="):
                         # ACDP 1.1: path of the A2A Agent Card on the SRV host/port
                         card_path = item[4:]
+                    elif item.startswith("key="):
+                        # ACDP arena: Ed25519 public-key fingerprint
+                        key = item[4:]
 
             # Construct agent info
             agent_info = {
@@ -97,6 +101,7 @@ class DNSResolver:
                 "acdp_version": version,
                 "protocols": protocols or ["rest-json"],
                 "source": "dns",
+                "key": key,
             }
 
             if card_path:
