@@ -93,6 +93,7 @@ class Arena:
         self.tasks: Dict[str, asyncio.Task] = {}
         self.live = False
         self._guard_task: Optional[asyncio.Task] = None
+        self.replay_task: Optional[asyncio.Task] = None
         self.ctx = ArenaContext(
             bus=bus,
             threads=ThreadRegistry(settings.thread_cap),
