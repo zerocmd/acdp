@@ -8,45 +8,18 @@ has its own conversation history; the model client, tools and prompt are identic
 import asyncio
 import logging
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
 from strands import Agent
 from strands.agent.conversation_manager import SlidingWindowConversationManager
-from strands.models import Model
 
+from .models import ModelFactory, build_model  # noqa: F401  (re-exported for node.py)
 from .tools import build_tools
 
 if TYPE_CHECKING:
     from node import AgentNode
 
 logger = logging.getLogger(__name__)
-
-ModelFactory = Callable[[], Model]
-
-
-def build_model(model_config: Dict[str, Any]) -> Model:
-    """Model provider selected by MODEL_PROVIDER / MODEL_ID."""
-    provider = model_config.get("provider", "anthropic")
-    model_id = model_config.get("model_id")
-    max_tokens = int(model_config.get("max_tokens", 16000))
-
-    if provider == "anthropic":
-        from strands.models.anthropic import AnthropicModel
-
-        # The Anthropic client reads ANTHROPIC_API_KEY from the environment.
-        return AnthropicModel(model_id=model_id or "claude-sonnet-5-5", max_tokens=max_tokens)
-
-    if provider == "bedrock":
-        from strands.models.bedrock import BedrockModel
-
-        if not model_id:
-            raise ValueError("MODEL_ID is required when MODEL_PROVIDER=bedrock")
-        return BedrockModel(
-            model_id=model_id, max_tokens=max_tokens, region_name=model_config.get("region")
-        )
-
-    raise ValueError(f"Unsupported MODEL_PROVIDER: {provider!r} (use 'anthropic' or 'bedrock')")
-
 
 def build_system_prompt(config: Dict[str, Any], peer_tools: bool) -> str:
     capabilities = ", ".join(config.get("capabilities", [])) or "general assistance"

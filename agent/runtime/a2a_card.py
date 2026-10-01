@@ -24,7 +24,7 @@ from a2a.types import (
 )
 from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH
 
-from .delegation import ACDP_EXTENSION_URI
+ACDP_EXTENSION_URI = "https://github.com/zerocmd/acdp/blob/main/ACDP.md#a2a-extension-v1"
 
 A2A_PROTOCOL_VERSION = "0.3.0"
 

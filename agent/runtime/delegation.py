@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Mapping, Optional
 
 # A2A extension that carries ACDP identity and delegation state. Declared in each
 # Agent Card under capabilities.extensions and defined in ACDP.md ("A2A Extension v1").
-ACDP_EXTENSION_URI = "https://github.com/zerocmd/acdp/blob/main/ACDP.md#a2a-extension-v1"
+from .a2a_card import ACDP_EXTENSION_URI
 
 
 @dataclass(frozen=True)
