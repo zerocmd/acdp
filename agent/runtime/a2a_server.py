@@ -30,14 +30,24 @@ class ACDPA2AServer(A2AServer):
 
 
 class BearerTokenMiddleware:
-    """Require ``Authorization: Bearer <token>`` on agent-to-agent endpoints.
+    """Require ``Authorization: Bearer <token>`` on endpoints that spend credits or change state.
 
-    Guards the A2A JSON-RPC endpoint and the legacy ``/assist`` endpoint. Discovery
-    documents (Agent Card, /metadata, /peers, /health) stay public, as ACDP and A2A
-    both expect them to be fetchable before any credential exchange.
+    Guards the endpoints that spend model credits on a peer's behalf (A2A JSON-RPC,
+    legacy ``/assist``) and the operator controls that change node state (shared-memory
+    writes, starting/stopping gossip). Discovery documents (Agent Card, /metadata,
+    /peers, /health) stay public, as ACDP and A2A both expect them to be fetchable
+    before any credential exchange. ``POST /peers`` stays open because gossip is a
+    hint: every id it carries is re-resolved through the registry or DNS. ``/chat`` is
+    the user-facing surface and is left to network-level access control.
     """
 
-    PROTECTED = {("POST", "/"), ("POST", "/assist")}
+    PROTECTED = {
+        ("POST", "/"),
+        ("POST", "/assist"),
+        ("POST", "/memory"),
+        ("POST", "/gossip/start"),
+        ("POST", "/gossip/stop"),
+    }
 
     def __init__(self, app: Any, token: Optional[str]):
         self.app = app

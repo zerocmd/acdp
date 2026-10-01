@@ -1280,7 +1280,7 @@ The extension ties an Agent Card to an ACDP identity and carries delegation stat
 }
 ```
 
-An ACDP client that discovered agent id `X` and then fetched a card MUST reject the card if `params.id` is not `X`. This binds the card to the discovered identity and catches misrouted or substituted cards. It is not a substitute for TLS certificate validation or signed cards (see [Security Mapping](#security-mapping)).
+An ACDP client that discovered agent id `X` and then fetched a card MUST reject the card if `params.id` is not `X`. This is a consistency check: it catches registry, DNS or gossip entries that point at the wrong agent. It is not authentication, because an endpoint can declare any id; identity comes from TLS certificate validation on the card URL and from signed cards (see [Security Mapping](#security-mapping)).
 
 **Message metadata.** When an agent sends an A2A message on behalf of an upstream request, it adds the extension URI to `Message.extensions` and a delegation record to `Message.metadata`, keyed by the extension URI:
 
@@ -1303,6 +1303,8 @@ An agent receiving a message with `hops = h` and `trace = T` that wants to deleg
 3. Otherwise sends `hops = h + 1`, `trace = T + [own id]`.
 
 Refusals are reported to the local model as a failed tool call, so the agent answers without that peer rather than failing the request. Receivers SHOULD cap `trace` length and ignore malformed records.
+
+The delegation record is cooperative. It bounds chains among agents that follow this profile, but a caller can omit or forge it (for example `hops: 0` with an empty trace), so it is not a defence against a hostile caller. Against those, an agent relies on authentication on its task endpoints, its own per-request limit on outbound peer calls, and rate limiting.
 
 ### Task Invocation over A2A
 

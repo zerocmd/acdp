@@ -15,12 +15,12 @@ x-agent-env: &agent-env
   ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
   # anthropic (default) or bedrock. For bedrock set MODEL_ID and AWS credentials/region.
   MODEL_PROVIDER: ${MODEL_PROVIDER:-anthropic}
-  MODEL_ID: ${MODEL_ID:-claude-sonnet-5}
+  MODEL_ID: ${MODEL_ID:-claude-sonnet-5-5}
   # auto: the model decides when to consult peers; always: consult at least one; off: never
   COLLABORATION_MODE: ${COLLABORATION_MODE:-auto}
   ACDP_MAX_DELEGATION_DEPTH: ${ACDP_MAX_DELEGATION_DEPTH:-2}
   ACDP_MAX_PEER_CALLS: ${ACDP_MAX_PEER_CALLS:-4}
-  # Set to require a shared bearer token on A2A JSON-RPC and /assist between agents.
+  # Set to require a shared bearer token on A2A JSON-RPC, /assist, POST /memory and /gossip/*.
   ACDP_A2A_TOKEN: ${ACDP_A2A_TOKEN:-}
   AGENT_PORT: "8000"
   REGISTRY_URL: http://registry:5000

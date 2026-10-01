@@ -10,7 +10,7 @@ This document reviews the ACDP proof of concept as it stood on `main` (commit `2
 - **Delegation is bounded.** Each outbound A2A message carries a hop count and trace in the ACDP extension metadata. Agents refuse cycles and chains longer than `ACDP_MAX_DELEGATION_DEPTH`, and each request may make at most `ACDP_MAX_PEER_CALLS` peer calls.
 - **Old and new agents interoperate.** ACDP 1.0 peers are still called through `/assist`, and ACDP 1.0 clients can still use every existing endpoint.
 - **Five defects fixed along the way:** a registry that silently split into two, a retired model, a DNS API that allowed injection into the zone, peer output injected into the system prompt, and a broken healthcheck (details in section 1).
-- **Verification.** 40 automated tests, including multi-agent A2A round trips with a scripted model. The registry and two agents were also smoke-tested as real processes. No live model calls were made and no Docker images were built (see section 7).
+- **Verification.** 45 automated tests, including multi-agent A2A round trips with a scripted model. The registry and two agents were also smoke-tested as real processes. No live model calls were made and no Docker images were built (see section 7).
 
 ## 1. Review of the Existing Implementation
 
@@ -19,7 +19,7 @@ This document reviews the ACDP proof of concept as it stood on `main` (commit `2
 | # | Finding | Where | Disposition |
 | --- | --- | --- | --- |
 | C1 | **The registry splits into two.** It keeps all state in module-level dicts but ran under gunicorn with `--workers 2`, so each worker process held its own registry. Registrations, heartbeats and memory writes landed on whichever worker took the request. The symptoms were intermittent "agent not found" heartbeats and agents or memory entries appearing and disappearing. The client-side `_memory_cache` in `registry_client.py` ("potential persistence issues with the registry") works around this symptom. | `registry/DockerFile` | Fixed: one worker, eight threads. |
-| C2 | **Every model call fails.** The agents call `claude-3-7-sonnet-latest`, and Claude Sonnet 3.7 was retired on 2026-02-19. | `agent/config.py` | Fixed: `claude-sonnet-5` (current-generation Sonnet), configurable with `MODEL_ID`/`MODEL_PROVIDER`. |
+| C2 | **Every model call fails.** The agents call `claude-3-7-sonnet-latest`, and Claude Sonnet 3.7 was retired on 2026-02-19. | `agent/config.py` | Fixed: `claude-sonnet-5-5` (current Sonnet), configurable with `MODEL_ID`/`MODEL_PROVIDER`. |
 | C3 | Collaboration was triggered by substring matching on `?`, `who`, `what`, `how`, `can you`, ... ("show" contains "how"), so nearly every message fanned out to up to three peers. Peers were ranked by how many capabilities they did *not* share with the caller, not by relevance to the question. | `agent/agent.py` `handle_chat` | Replaced by model-driven tool use. |
 | C4 | The README says an agent can answer "What is the deadline for project X?" from shared memory, but no code path ever gave memory to the model. Memory was only written. | `agent/agent.py` | Fixed: `read_shared_memory` / `write_shared_memory` tools. |
 | C5 | `RegistryClient._memory_cache` is a class attribute that is returned whenever the registry answers with empty memory, so stale or deleted entries come back. | `agent/discovery/registry_client.py` | Root cause removed by C1; the cache remains (see R6). |
@@ -36,7 +36,7 @@ The PoC is explicitly not hardened, and this revision does not try to make it pr
 | --- | --- | --- |
 | S1 | **Zone injection through the DNS API.** `dns_api.py` passed `domain`, `capabilities` and `description` unchecked into an `nsupdate` script. A quote or newline in a description let the caller append arbitrary `update add/delete` commands to the `agents.local` zone. The API is published on host port 8053. | Fixed: strict validation with `fullmatch` (a bare `$` would accept a trailing newline); the description is stripped of quotes, backslashes and control characters. Tests cover the injection vectors. |
 | S2 | **Peer output with system-prompt authority.** Peer answers were concatenated into the orchestrator's system prompt, so any peer (or anyone who could register one) could instruct the orchestrator. | Fixed: peer answers arrive as tool results, and the system prompt tells the model to treat them as information, not instructions. |
-| S3 | No authentication on agent-to-agent task calls. | Partly fixed: optional shared bearer token (`ACDP_A2A_TOKEN`) on A2A JSON-RPC and `/assist`, advertised in the Agent Card `securitySchemes`. |
+| S3 | No authentication on agent-to-agent task calls or operator endpoints. | Partly fixed: optional shared bearer token (`ACDP_A2A_TOKEN`) on A2A JSON-RPC, `/assist`, `POST /memory`, `/gossip/start` and `/gossip/stop`, advertised in the Agent Card `securitySchemes`; a startup warning when it is unset. `/chat` stays open as the user-facing surface (network-level control). |
 | S4 | Registration is unauthenticated, so any client can overwrite another agent's entry and redirect its traffic. | Mitigated for A2A calls: callers reject an Agent Card whose ACDP extension id differs from the id they discovered. Registration itself is still open. See phase 1 in section 5. |
 | S5 | The registry proxies `/agents/<id>/chat` and `/agents/<id>/peers` to whatever URL was registered (server-side request forgery through registration). | Not fixed. Id format is now validated; proof of control is in phase 1. |
 | S6 | BIND has `allow-update { any; }` and `recursion yes` with public forwarders, and port 53 is published on the host: an open resolver. | Not fixed (PoC scope). Restrict `allow-update` to the DNS API container, use TSIG, and disable recursion or unpublish the port. |
@@ -87,7 +87,7 @@ graph TD
 | Host/port parsing in four places | `agent/utils/endpoints.py` |
 | Registry: unused `SearchService`, capability-only search | Registry uses `SearchService`: `skill`, `protocol`, `status` filters; stores Agent Cards; `/agents/<id>/card`; `/.well-known/agent-registry`; id and card validation |
 | DNS TXT `ver`, `caps`, `desc` | adds `proto` and `a2a`; `ver=1.1`; validated inputs |
-| No automated tests | 40 tests under `agent/tests`, `registry/tests`, `dns/tests` |
+| No automated tests | 45 tests under `agent/tests`, `registry/tests`, `dns/tests` |
 
 ### Endpoints of an agent
 
@@ -111,11 +111,11 @@ graph TD
 
 **D4. Let the model decide when to collaborate.** The heuristic was cheap to run but made every "what"/"how" message cost four model calls. With tools, the model consults peers when the question needs them and can call several in parallel (Strands runs concurrent tool calls concurrently). `COLLABORATION_MODE=always` restores "always ask a peer" for demos, and `off` removes the peer tools. `ACDP_MAX_PEER_CALLS` caps `ask_agent` calls per request; Strands passes one `invocation_state` dict through every cycle of an invocation, so the counter covers the whole request, including parallel calls.
 
-**D5. Carry delegation state in A2A message metadata.** With every agent able to call every other, A -> B -> A loops and long chains become possible. The trace travels in `Message.metadata` under the extension URI, the namespacing A2A recommends. On the receiving side, the Strands executor passes the A2A `RequestContext` to tools as `invocation_state["a2a_request_context"]`, so `ask_agent` reads the trace without any SDK patching. The outbound call uses the a2a-sdk client directly because Strands' `A2AAgent` builds the outgoing `Message` internally and exposes no way to set metadata.
+**D5. Carry delegation state in A2A message metadata.** With every agent able to call every other, A -> B -> A loops and long chains become possible. The trace travels in `Message.metadata` under the extension URI, the namespacing A2A recommends. On the receiving side, the Strands executor passes the A2A `RequestContext` to tools as `invocation_state["a2a_request_context"]`, so `ask_agent` reads the trace without any SDK patching. The outbound call uses the a2a-sdk client directly because Strands' `A2AAgent` builds the outgoing `Message` internally and exposes no way to set metadata. The trace bounds chains among cooperating ACDP agents only: a caller can omit or forge it, so against a hostile caller an agent relies on `ACDP_MAX_PEER_CALLS` (its own fan-out), authentication on task endpoints, and rate limits.
 
 **D6. Fall back to `/assist` for 1.0 peers.** A 1.1 agent uses A2A when the peer advertises it (metadata `a2a`, `interfaces.a2a`, an `a2a/*` protocol, or TXT `a2a=`) and `/assist` otherwise, so a network can be upgraded one agent at a time.
 
-**D7. Check the card's identity.** After discovering agent id `X`, the caller rejects a card whose ACDP extension says anything else. This costs one comparison and catches misrouting and simple substitution. It is not authentication; signed cards and TLS are (phase 1).
+**D7. Check the card's identity for consistency.** After discovering agent id `X`, the caller rejects a card whose ACDP extension says anything else. This costs one comparison and catches registry, DNS or gossip entries that point at the wrong agent. It is not authentication, since an endpoint can declare any id; signed cards and TLS are (phase 1). Cards are cached for 5 minutes per (agent id, URL), so a peer that moves is re-fetched immediately.
 
 **D8. Stay on A2A 0.3 for now.** a2a-sdk 1.x (A2A 1.0) is released, but `strands-agents[a2a]` 1.57 requires `a2a-sdk<0.4`. Running two a2a-sdk versions in one process is not possible, and Strands' server is the reason to use Strands here. The revision therefore speaks A2A 0.3 and makes the migration mechanical:
 - the registry stores cards as opaque JSON and resolves the endpoint from either `url` (0.3) or `supportedInterfaces[]` (1.0);
@@ -124,7 +124,7 @@ graph TD
 
 **D9. FastAPI for agents, Flask for the registry.** The Strands A2A app is ASGI, and one FastAPI app serves both surfaces on one port. The registry has no A2A server role, so it stays on Flask with minimal change.
 
-**D10. Model and provider.** The default is `claude-sonnet-5`, the current Sonnet, replacing the retired Sonnet 3.7 the PoC was built on. `MODEL_PROVIDER=bedrock` switches to Amazon Bedrock through Strands' `BedrockModel` (set `MODEL_ID` to a Bedrock model id). No sampling parameters are set, because current models reject `temperature`.
+**D10. Model and provider.** The default is `claude-sonnet-5-5`, the current Sonnet, replacing the retired Sonnet 3.7 the PoC was built on (`claude-sonnet-5` remains available as a legacy model). `MODEL_PROVIDER=bedrock` switches to Amazon Bedrock through Strands' `BedrockModel` (set `MODEL_ID` to a Bedrock model id). No sampling parameters are set, because current models reject `temperature`.
 
 ## 5. Approach from Here
 
@@ -153,11 +153,11 @@ Visible behaviour changes: `/chat` collaborates when the model judges it useful 
 
 ## 7. Verification
 
-- **Automated (`pytest`, 40 tests, no network or API key):**
-  - `agent/tests/test_a2a_integration.py` runs several agents in one process with a scripted Strands `Model` and routes real A2A JSON-RPC between them over httpx ASGI transports. It covers: the Agent Card mapping; a plain a2a-sdk client calling an agent; `/chat` delegating over A2A with the cycle refused on the far side (which passes only if the trace survives the A2A hop); the depth limit; the per-request peer-call budget under concurrent tool calls; `/assist` fallback for an ACDP 1.0 peer; the bearer token (card public, RPC protected); rejection of a card with the wrong identity; and `COLLABORATION_MODE=off`.
-  - `agent/tests/test_units.py`: endpoint resolution, delegation state, card helpers for A2A 0.3 and 1.0 shapes, DNS TXT parsing for ACDP 1.0 and 1.1.
+- **Automated (`pytest`, 45 tests, no network or API key):**
+  - `agent/tests/test_a2a_integration.py` runs several agents in one process with a scripted Strands `Model` and routes real A2A JSON-RPC between them over httpx ASGI transports. It covers: the Agent Card mapping; a plain a2a-sdk client calling an agent; `/chat` delegating over A2A with the cycle refused on the far side (which passes only if the trace survives the A2A hop); the depth limit; the per-request peer-call budget under concurrent tool calls, over both `/chat` and A2A; `/assist` agents built without peer tools; session eviction skipping in-flight sessions; `/assist` fallback for an ACDP 1.0 peer; the bearer token (card public, RPC protected); rejection of a card with the wrong identity; and `COLLABORATION_MODE=off`.
+  - `agent/tests/test_units.py`: endpoint resolution, delegation state, card helpers for A2A 0.3 and 1.0 shapes, DNS TXT parsing for ACDP 1.0 and 1.1, A2A response text extraction.
   - `registry/tests`: card storage, legacy registration, validation, skill/protocol/status filters, dashboard rendering.
-  - `dns/tests`: validation, injection vectors, and the exact `nsupdate` script the zone script produces.
+  - `dns/tests`: validation, injection vectors, missing or oversized request bodies, and the exact `nsupdate` script the zone script produces.
 - **Process smoke test:** registry under gunicorn and two agents under uvicorn on localhost. Registration with cards, registry search by capability/protocol/status, registry-driven peer discovery, the Agent Card, raw JSON-RPC and `examples/a2a_client.py` all worked. Without an API key, the A2A task ended cleanly in state `failed` and `/chat` returned 502.
 - **Not verified here:** live model calls (no API key in this environment), Docker image builds and `docker compose up` (no Docker daemon), and BIND dynamic updates. `docker compose config` validates the compose file.
 
@@ -169,6 +169,7 @@ Visible behaviour changes: `/chat` collaborates when the model judges it useful 
 | R2 | Model-driven fan-out can cost more than the heuristic on some questions (the model may consult several peers, and peers may delegate within the depth budget). In the worst case one user request triggers 1 + c + c² + … + c^d agent invocations for c = `max_peer_calls` and d = `max_delegation_depth` (21 with the defaults). | Both limits are configurable (defaults 4 and 2). Measure with real traffic before raising either. |
 | R3 | The A2A task store is in memory, so tasks are lost on restart. | Phase 3. |
 | R4 | The shared bearer token is one secret for the whole network. | Phase 1 per-agent credentials. |
+| R8 | The delegation trace is cooperative: a hostile caller can reset it. | Per-request peer-call limit, token on task endpoints; phase 1 adds per-agent credentials. |
 | R5 | Agent Cards advertise Docker-network URLs, so host-side clients must map ports (`examples/a2a_client.py` does). | Set `AGENT_PUBLIC_URL` per agent in deployments with real DNS. |
 | R6 | The dead modules listed in C9 and the client-side memory cache are still in the tree, because deleting files was outside what this session was permitted to do. | Delete `agent/services/`, `agent/handlers/`, `agent/peers/gossip.py`, `agent/utils/registry_client.old`, `registry/models/agent.py`, and the `_memory_cache` fallback in `agent/discovery/registry_client.py`. Nothing imports them. |
 | R7 | `__docker-compose.override.yml` is an inactive leftover (the leading underscores stop Compose from loading it) and still uses the old per-agent layout. | Delete it or rename it to `docker-compose.override.yml` after updating it to the `x-agent` anchors. |

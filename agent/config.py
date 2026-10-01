@@ -36,7 +36,7 @@ ACDP_VERSION = "1.1"
 # Model provider for the Strands agent. "anthropic" (default) or "bedrock".
 model_provider = os.environ.get("MODEL_PROVIDER", "anthropic").lower()
 model_id = os.environ.get(
-    "MODEL_ID", "claude-sonnet-5" if model_provider == "anthropic" else ""
+    "MODEL_ID", "claude-sonnet-5-5" if model_provider == "anthropic" else ""
 )
 
 AGENT_CONFIG = {

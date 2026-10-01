@@ -2,9 +2,21 @@
 
 from types import SimpleNamespace
 
+from a2a.types import (
+    Artifact,
+    Message,
+    Part,
+    Role,
+    Task,
+    TaskState,
+    TaskStatus,
+    TextPart,
+)
+
 from discovery.dns_resolver import DNSResolver
 from runtime.a2a_card import card_acdp_params, card_endpoint, card_skill_ids
 from runtime.delegation import ACDP_EXTENSION_URI, DelegationState
+from runtime.peer_client import extract_text
 from utils.endpoints import a2a_url, base_url, endpoint_url
 
 
@@ -94,3 +106,34 @@ def test_dns_resolver_keeps_acdp_1_0_records_legacy(monkeypatch):
     info = resolver.resolve_agent("agent1.agents.local")
     assert "a2a" not in info
     assert a2a_url(info) is None
+
+
+def _text(t):
+    return Part(root=TextPart(text=t))
+
+
+def test_extract_text_reads_artifacts_then_status_message():
+    with_artifacts = Task(
+        id="t1",
+        context_id="c1",
+        status=TaskStatus(state=TaskState.completed),
+        artifacts=[
+            Artifact(artifact_id="a1", parts=[_text("Lateral movement: "), _text("check 4624")]),
+            Artifact(artifact_id="a2", parts=[_text(" and 4648.")]),
+        ],
+    )
+    assert extract_text((with_artifacts, None)) == ("Lateral movement: check 4624 and 4648.", "completed")
+
+    status_only = Task(
+        id="t2",
+        context_id="c1",
+        status=TaskStatus(
+            state=TaskState.failed,
+            message=Message(role=Role.agent, message_id="m1", parts=[_text("Agent execution failed")]),
+        ),
+    )
+    assert extract_text((status_only, None)) == ("Agent execution failed", "failed")
+
+    direct = Message(role=Role.agent, message_id="m2", parts=[_text("hi")])
+    assert extract_text(direct) == ("hi", None)
+    assert extract_text(None) == ("", None)

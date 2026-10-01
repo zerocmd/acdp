@@ -3,8 +3,11 @@
 import importlib.util
 import os
 import shutil
+import socket
+import socketserver
 import stat
 import subprocess
+import threading
 
 import pytest
 
@@ -77,3 +80,23 @@ def test_zone_script_renders_acdp_1_1_txt(tmp_path):
         '"proto=a2a/0.3,rest-json" "a2a=/.well-known/agent-card.json"'
     ) in out
     assert "SRV 0 0 8000 agent3.agents.local." in out
+
+
+def _raw_post(port, head):
+    with socket.create_connection(("127.0.0.1", port), timeout=5) as sock:
+        sock.sendall(head.encode())
+        return sock.recv(4096).decode().split("\r\n", 1)[0]
+
+
+def test_missing_or_oversized_body_is_rejected_cleanly():
+    server = socketserver.TCPServer(("127.0.0.1", 0), dns_api.DNSUpdateHandler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    port = server.server_address[1]
+    try:
+        assert " 411 " in _raw_post(port, "POST /update_dns HTTP/1.0\r\n\r\n")
+        assert " 400 " in _raw_post(port, "POST /update_dns HTTP/1.0\r\nContent-Length: 0\r\n\r\n")
+        too_big = dns_api.MAX_BODY_BYTES + 1
+        assert " 413 " in _raw_post(port, f"POST /update_dns HTTP/1.0\r\nContent-Length: {too_big}\r\n\r\n")
+    finally:
+        server.shutdown()
+        server.server_close()

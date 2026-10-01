@@ -81,14 +81,22 @@ class PeerClient:
         self.verify_cards = security.get("verify_peer_cards", True)
         self.timeout = (config.get("collaboration") or {}).get("timeout", 120)
         self._http_client_factory = http_client_factory or self._default_http_client
-        self._cards: Dict[str, tuple[float, AgentCard]] = {}
+        self._cards: Dict[tuple[str, str], tuple[float, AgentCard]] = {}
 
     def _default_http_client(self) -> httpx.AsyncClient:
         headers = {"Authorization": f"Bearer {self.token}"} if self.token else None
         return httpx.AsyncClient(timeout=self.timeout, headers=headers)
 
     async def get_card(self, peer_id: str, base_url: str, http: httpx.AsyncClient) -> AgentCard:
-        cached = self._cards.get(peer_id)
+        """Fetch (and cache per peer and URL) the peer's Agent Card.
+
+        The ACDP id check below is a consistency check, not authentication: it catches
+        a registry, DNS or gossip entry that points at the wrong agent, but a hostile
+        endpoint can declare any id. Identity comes from TLS on the card URL and, later,
+        signed cards (see ACDP.md, "Security Mapping").
+        """
+        key = (peer_id, base_url)
+        cached = self._cards.get(key)
         if cached and time.time() - cached[0] < CARD_TTL_SECONDS:
             return cached[1]
         card = await A2ACardResolver(httpx_client=http, base_url=base_url).get_agent_card()
@@ -98,7 +106,7 @@ class PeerClient:
                 raise PeerCallError(
                     f"Agent Card at {base_url} claims ACDP id {claimed!r}, expected {peer_id!r}"
                 )
-        self._cards[peer_id] = (time.time(), card)
+        self._cards[key] = (time.time(), card)
         return card
 
     async def ask(
@@ -111,7 +119,9 @@ class PeerClient:
         peer_name = peer_info.get("name") or peer_id
         base = a2a_url(peer_info)
         if base:
+            logger.info(f"Calling {peer_id} over A2A at {base}")
             return await self._ask_a2a(peer_id, peer_name, base, question, delegation)
+        logger.info(f"{peer_id} advertises no A2A endpoint; calling legacy /assist")
         return await self._ask_legacy(peer_id, peer_name, peer_info, question)
 
     async def _ask_a2a(

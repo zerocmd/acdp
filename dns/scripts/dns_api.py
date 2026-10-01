@@ -17,6 +17,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 ZONE = os.environ.get("AGENT_ZONE", "agents.local")
+MAX_BODY_BYTES = 16 * 1024
 _LABEL = r"[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
 DOMAIN_RE = re.compile(rf"^({_LABEL}\.)+{re.escape(ZONE)}$")
 HOST_RE = re.compile(rf"^{_LABEL}(\.{_LABEL})*\.?$")
@@ -98,7 +99,17 @@ class DNSUpdateHandler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         """Handle POST requests for DNS updates"""
         if self.path == "/update_dns":
-            content_length = int(self.headers["Content-Length"])
+            try:
+                content_length = int(self.headers.get("Content-Length", ""))
+            except ValueError:
+                self._send_error(411, "Content-Length required")
+                return
+            if content_length <= 0:
+                self._send_error(400, "Empty request body")
+                return
+            if content_length > MAX_BODY_BYTES:
+                self._send_error(413, f"Body larger than {MAX_BODY_BYTES} bytes")
+                return
             post_data = self.rfile.read(content_length)
 
             try:

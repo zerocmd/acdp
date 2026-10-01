@@ -115,7 +115,7 @@ def build_router(node: "AgentNode") -> APIRouter:
             f"(under 250 words) from the perspective of your capabilities; the answer will be "
             f"merged into {requestor_name}'s reply.\n\n{question}"
         )
-        agent = node.runtime.new_agent(f"assist:{requestor_id}")
+        agent = node.runtime.new_agent(f"assist:{requestor_id}", peer_tools=False)
         state = DelegationState(hops=max_depth, trace=[requestor_id])
         try:
             response = await node.runtime.invoke(agent, prompt, {"acdp_delegation": state})

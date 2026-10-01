@@ -26,11 +26,11 @@ You will require a BIND server as a Docker image: [BIND 9](https://hub.docker.co
    | Variable | Purpose |
    | --- | --- |
    | `MODEL_PROVIDER` [`anthropic`] | `anthropic` or `bedrock` (Bedrock needs `MODEL_ID` and AWS credentials/region) |
-   | `MODEL_ID` [`claude-sonnet-5`] | Model for every agent |
+   | `MODEL_ID` [`claude-sonnet-5-5`] | Model for every agent |
    | `COLLABORATION_MODE` [`auto`] | `auto`: the model decides when to consult peers; `always`: consult at least one relevant peer per question; `off`: no peer tools |
    | `ACDP_MAX_DELEGATION_DEPTH` [`2`] | Longest agent-to-agent chain (A -> B -> C is 2) |
    | `ACDP_MAX_PEER_CALLS` [`4`] | Peer calls one request may make |
-   | `ACDP_A2A_TOKEN` [unset] | Shared bearer token required on A2A JSON-RPC and `/assist` between agents |
+   | `ACDP_A2A_TOKEN` [unset] | Shared bearer token required on A2A JSON-RPC, `/assist`, `POST /memory`, `/gossip/start` and `/gossip/stop`. `/chat` stays open; restrict it at the network level |
 
 3. Install dependencies (if not using Docker):
 

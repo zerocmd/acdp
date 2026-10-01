@@ -138,6 +138,66 @@ def test_peer_call_budget_applies_per_request(network):
     assert body["response"].count("answered:") == 2
 
 
+def test_peer_call_budget_applies_over_a2a(network):
+    # Same budget, but the request arrives over A2A, so invocation_state is built by the
+    # Strands A2A executor rather than by /chat.
+    a = network.add(make_config("agent-a", "Agent Alpha", ["chat"], max_peer_calls=2), None)
+    b = network.add(make_config("agent-b", "Agent Beta", ["chat"]), echo_script("B"))
+    calls = [("ask_agent", {"agent_id": b.id, "question": f"q{i}"}) for i in range(3)]
+
+    def script(messages):
+        results = tool_results(messages)
+        return ("text", " | ".join(results)) if results else ("tools", calls)
+
+    a.runtime._model_factory = lambda: ScriptedModel(script)
+    a.peer_manager.add_peer(b.id, b.to_dict())
+
+    async def call():
+        async with network.client_factory()() as http:
+            card = await A2ACardResolver(http, "http://agent-a:8000/").get_agent_card()
+            client = ClientFactory(ClientConfig(httpx_client=http, streaming=False)).create(card)
+            message = Message(
+                role=Role.user,
+                message_id=str(uuid.uuid4()),
+                parts=[Part(root=TextPart(text="fan out"))],
+            )
+            final = None
+            async for event in client.send_message(message):
+                final = event
+            return extract_text(final)
+
+    text, state = asyncio.run(call())
+    assert state == "completed"
+    assert text.count("answered:") == 2
+    assert "Peer-call budget for this request (2) is used up" in text
+
+
+def test_assist_requests_get_an_agent_without_peer_tools(network):
+    node = network.add(make_config("agent-a", "Agent Alpha", ["chat"]), echo_script("A"))
+    assert set(node.runtime.new_agent(peer_tools=False).tool_names) == {
+        "read_shared_memory",
+        "write_shared_memory",
+    }
+    assert "find_agents" in node.runtime.new_agent().tool_names
+    body = TestClient(network.apps["agent-a"]).post("/assist", json={"question": "hi"}).json()
+    assert body["status"] == "success"
+    assert body["response"].endswith("hi")
+
+
+def test_session_eviction_skips_sessions_in_flight(network):
+    cfg = make_config("agent-a", "Agent Alpha", ["chat"])
+    cfg["sessions"]["max_sessions"] = 2
+    node = network.add(cfg, echo_script("A"))
+    runtime = node.runtime
+    runtime.session("s1")
+    runtime.session("s2")
+    _, lock = runtime.session("s1")  # s1 is now most recent; s2 is the LRU candidate
+    asyncio.run(lock.acquire())  # a /chat on s1 is in flight
+    runtime.session("s2")  # s2 becomes most recent; s1 is the LRU candidate but busy
+    runtime.session("s3")
+    assert set(runtime._sessions) == {"s1", "s3"}
+
+
 def test_legacy_acdp_1_0_peer_is_reached_through_assist(network):
     a = network.add(make_config("agent-a", "Agent Alpha", ["chat"]), None)
     b = network.add(make_config("agent-b", "Agent Beta", ["statistics"]), echo_script("B"))
@@ -169,6 +229,11 @@ def test_bearer_token_guards_a2a_but_not_discovery(network):
     rpc = {"jsonrpc": "2.0", "id": 1, "method": "message/send", "params": {}}
     assert client.post("/", json=rpc).status_code == 401
     assert client.post("/assist", json={"question": "hi"}).status_code == 401
+    assert client.post("/memory", json={"key": "k", "value": 1}).status_code == 401
+    assert client.post("/gossip/start").status_code == 401
+    assert client.post("/gossip/stop").status_code == 401
+    # The user-facing chat surface is deliberately left to network-level control.
+    assert client.post("/chat", json={"text": "hello"}).json()["response"] == "B: hello"
 
     a_without = network.add(make_config("agent-a", "Agent Alpha", ["chat"]), echo_script("A"))
     with pytest.raises(PeerCallError):

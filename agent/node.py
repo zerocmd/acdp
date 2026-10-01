@@ -170,6 +170,14 @@ class AgentNode:
         if not self.register():
             logger.warning("Initial registration failed, the heartbeat loop will retry")
 
+    def warn_if_open(self) -> None:
+        if not (self.config.get("security") or {}).get("a2a_token"):
+            logger.warning(
+                "ACDP_A2A_TOKEN is not set: A2A JSON-RPC, /assist and POST /memory accept "
+                "unauthenticated requests, and anyone who can reach this port can spend "
+                "this agent's model credits. Set ACDP_A2A_TOKEN outside a closed network."
+            )
+
     def start_background_tasks(self) -> None:
         for target in (self._startup, self._heartbeat_loop, self._peer_refresh_loop):
             threading.Thread(target=target, daemon=True, name=target.__name__).start()
@@ -223,6 +231,7 @@ class AgentNode:
 
         @asynccontextmanager
         async def lifespan(app: FastAPI):
+            node.warn_if_open()
             if start_background:
                 node.start_background_tasks()
             yield

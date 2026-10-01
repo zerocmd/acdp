@@ -34,7 +34,7 @@ def build_model(model_config: Dict[str, Any]) -> Model:
         from strands.models.anthropic import AnthropicModel
 
         # The Anthropic client reads ANTHROPIC_API_KEY from the environment.
-        return AnthropicModel(model_id=model_id or "claude-sonnet-5", max_tokens=max_tokens)
+        return AnthropicModel(model_id=model_id or "claude-sonnet-5-5", max_tokens=max_tokens)
 
     if provider == "bedrock":
         from strands.models.bedrock import BedrockModel
@@ -96,17 +96,24 @@ class AgentRuntime:
         mode = (self.config.get("collaboration") or {}).get("mode", "auto")
         self.peer_tools = mode != "off"
         self.system_prompt = build_system_prompt(self.config, self.peer_tools)
+        self._solo_prompt = build_system_prompt(self.config, False)
         self._max_sessions = (self.config.get("sessions") or {}).get("max_sessions", 100)
         self._sessions: "OrderedDict[str, Tuple[Agent, asyncio.Lock]]" = OrderedDict()
 
-    def new_agent(self, context_id: str = "") -> Agent:
-        """Agent factory; also used as the Strands A2AServer ``agent_factory``."""
+    def new_agent(self, context_id: str = "", peer_tools: Optional[bool] = None) -> Agent:
+        """Agent factory; also used as the Strands A2AServer ``agent_factory``.
+
+        ``peer_tools=False`` builds an agent that cannot consult peers (used for legacy
+        ``/assist`` requests, which never delegate), so the model is not offered tools
+        that would only be refused.
+        """
+        with_peers = self.peer_tools if peer_tools is None else (peer_tools and self.peer_tools)
         return Agent(
             model=self._model_factory(),
             name=self.config["name"],
             description=self.config["description"],
-            system_prompt=self.system_prompt,
-            tools=build_tools(self.node, include_peer_tools=self.peer_tools),
+            system_prompt=self.system_prompt if with_peers else self._solo_prompt,
+            tools=build_tools(self.node, include_peer_tools=with_peers),
             callback_handler=None,
             conversation_manager=SlidingWindowConversationManager(window_size=40),
         )
@@ -116,8 +123,12 @@ class AgentRuntime:
         if entry is None:
             entry = (self.new_agent(session_id), asyncio.Lock())
             self._sessions[session_id] = entry
-            while len(self._sessions) > self._max_sessions:
-                self._sessions.popitem(last=False)
+            # Evict least-recently-used idle sessions; one with a /chat in flight stays.
+            for old_id in list(self._sessions):
+                if len(self._sessions) <= self._max_sessions:
+                    break
+                if old_id != session_id and not self._sessions[old_id][1].locked():
+                    del self._sessions[old_id]
         else:
             self._sessions.move_to_end(session_id)
         return entry
