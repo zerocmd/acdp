@@ -9,6 +9,8 @@ import { AddAgent } from "./components/addagent.js";
 import { Chat } from "./components/chat.js";
 import { NetworkView } from "./views/network.js";
 import { SequenceView } from "./views/sequence.js";
+import { FlowView } from "./views/flow.js";
+import { MatrixView } from "./views/matrix.js";
 import { Timeline } from "./components/timeline.js";
 import { Drawer } from "./components/drawer.js";
 import { RegistryView } from "./components/registry.js";
@@ -19,6 +21,8 @@ const store = createStore();
 export const VIEWS = {
   network: ["Network", NetworkView],
   sequence: ["Sequence", SequenceView],
+  flow: ["Flow", FlowView],
+  matrix: ["Matrix", MatrixView],
   registry: ["Registry", RegistryView],
 };
 

@@ -123,3 +123,14 @@ test("store notifies subscribers and reset keeps the view", () => {
   assert.equal(calls, 3);
   assert.ok(HANDLED.includes("registration.step"));
 });
+
+test("pair filter shows one direction and clears on other selections", () => {
+  let s = run([
+    ev("message.sent", { id: "p1", thread_id: "t1", from_id: "a", to_id: "b", intent: "share", body: "1", color: 0 }),
+    ev("message.sent", { id: "p2", thread_id: "t1", from_id: "b", to_id: "a", intent: "reply", body: "2", color: 0 }),
+  ]);
+  s = select(s, { pair: ["a", "b"] });
+  assert.deepEqual(chatItems(s).filter((m) => m.kind === "message").map((m) => m.id), ["p1"]);
+  s = select(s, { thread: "t1" });
+  assert.equal(s.selection.pair, null);
+});

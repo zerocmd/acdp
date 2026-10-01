@@ -16,7 +16,8 @@ UI_FILES = ["preact.js", "api.js", "app.js", "store.js", "palette.js", "style.cs
             "components/legend.js", "components/addagent.js", "components/chat.js",
             "views/network.js", "components/timeline.js", "lib/layout.js",
             "components/drawer.js", "components/steps.js",
-            "components/registry.js", "lib/diff.js", "views/sequence.js"]
+            "components/registry.js", "lib/diff.js", "views/sequence.js",
+            "views/flow.js", "views/matrix.js"]
 
 
 def test_ui_files_are_served(tmp_path):
@@ -51,3 +52,12 @@ def test_store_handles_every_emitted_event_type():
     emitted = emitted_event_types()
     assert "registration.step" in emitted and "bus.reset" in emitted
     assert emitted - handled == set()
+
+
+def test_ui_is_served_with_no_cache(tmp_path):
+    """Browsers must revalidate UI modules, or an upgrade mixes old and new code."""
+    arena = make_arena(make_cast(SOC, owner="northgate-soc", closer="northgate-soc"))
+    register_routes(arena, UI, tmp_path)
+    client = TestClient(arena.app)
+    for path in ("/", "/ui/store.js", "/ui/components/chat.js"):
+        assert client.get(path).headers.get("cache-control") == "no-cache", path

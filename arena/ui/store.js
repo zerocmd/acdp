@@ -23,7 +23,7 @@ const LANE = {
 
 function initialSelection() {
   return { agent: null, thread: "t1", allThreads: false, range: null, view: "network",
-    tab: "overview", adding: false, allQueries: false };
+    tab: "overview", adding: false, allQueries: false, pair: null };
 }
 
 export function initialState() {
@@ -243,15 +243,19 @@ export function apply(state, event) {
 
 export function select(state, patch) {
   state.selection = { ...state.selection, ...patch };
+  if (patch.pair === undefined && ("agent" in patch || "thread" in patch || "allThreads" in patch)) {
+    state.selection.pair = null;
+  }
   if (patch.thread && state.threads[patch.thread]) state.threads[patch.thread].unread = 0;
   if (patch.allThreads) for (const t of Object.values(state.threads)) t.unread = 0;
   return state;
 }
 
 export function chatItems(state) {
-  const { thread, allThreads, agent, range } = state.selection;
+  const { thread, allThreads, agent, range, pair } = state.selection;
   return state.messages.filter((m) => {
     if (range && (m.ts < range[0] || m.ts > range[1])) return false;
+    if (pair) return m.kind === "message" && m.from === pair[0] && m.to === pair[1];
     if (agent) return m.kind === "message" && (m.from === agent || m.to === agent);
     if (allThreads) return true;
     return m.threadId === thread || (m.kind === "system" && m.threadId === null);

@@ -149,3 +149,20 @@ code.txt { display: inline-block; margin: 1px 4px 1px 0; }
 .bracket { fill: none; stroke-width: 2; }
 .bracket.working { stroke: var(--pending); } .bracket.completed { stroke: var(--ok); }
 .bracket.rejected, .bracket.canceled, .bracket.failed { stroke: var(--bad); }
+
+.flow-edge { fill: none; stroke: var(--muted); stroke-width: 1.6; }
+.flow-edge.back { stroke-dasharray: 5 3; }
+.flow-edge.bad { stroke: var(--bad); } .flow-edge.verdict { stroke: var(--ok); stroke-width: 3; }
+.flow-head { fill: var(--muted); }
+.flow-label { font-size: 10px; text-anchor: middle; fill: var(--muted); }
+.flow-node { cursor: pointer; }
+.flow-box { fill: var(--panel); stroke: var(--pending); stroke-width: 2; }
+.flow-box.verified { stroke: var(--ok); } .flow-box.failed { stroke: var(--bad); }
+.flow-box.root { stroke-width: 3.5; } .flow-box.selected { fill: var(--panel-2); }
+.flow-name { font-size: 12px; text-anchor: middle; fill: var(--text); }
+.m-row { font-size: 11px; text-anchor: end; fill: var(--text); cursor: pointer; }
+.m-col { font-size: 11px; fill: var(--text); }
+.m-row.failed, .m-col.failed { fill: var(--bad); }
+.m-cell { fill: var(--accent); stroke: var(--line); cursor: pointer; }
+.m-cell.verified { stroke: var(--ok); stroke-width: 2; } .m-cell.failed { stroke: var(--bad); stroke-width: 2.5; }
+.m-cell.self { fill: var(--panel-2); fill-opacity: 1; }

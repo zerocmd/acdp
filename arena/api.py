@@ -39,6 +39,19 @@ class ReplayRequest(BaseModel):
     speed: float = Field(default=2.0, ge=1, le=10)
 
 
+class NoCacheStaticFiles(StaticFiles):
+    """Static files that the browser must revalidate on every load.
+
+    Without this, browsers cache UI modules by heuristic, and after an upgrade a
+    page can run a mix of old and new modules.
+    """
+
+    def file_response(self, *args, **kwargs):
+        response = super().file_response(*args, **kwargs)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 def slugify(name: str) -> str:
     """Lowercase, hyphenated, at most 32 characters. "agent" when empty."""
     slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:32].strip("-")
@@ -51,9 +64,9 @@ def register_routes(arena: Arena, ui_dir: Path, runs_dir: Path) -> None:
 
     @app.get("/", include_in_schema=False)
     async def index() -> FileResponse:
-        return FileResponse(ui_dir / "index.html")
+        return FileResponse(ui_dir / "index.html", headers={"Cache-Control": "no-cache"})
 
-    app.mount("/ui", StaticFiles(directory=ui_dir), name="ui")
+    app.mount("/ui", NoCacheStaticFiles(directory=ui_dir), name="ui")
 
     @app.websocket("/ws")
     async def events(socket: WebSocket) -> None:
