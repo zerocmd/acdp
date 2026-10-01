@@ -5,11 +5,15 @@ import traceback
 import logging
 import os
 import re
+import socket
 import urllib.parse
 
+import dns.exception
+import dns.resolver
 import requests
 
 from services.search import SearchService, agent_status
+from services.verification import OrgDirectory, normalize_org, verify_registration
 
 app = Flask(__name__, static_folder="static")
 logging.basicConfig(level=logging.INFO)
@@ -27,6 +31,32 @@ agent_chats = {}
 # All state above is per-process. Run a single worker process (threads are fine);
 # multiple workers each hold a different registry. See registry/DockerFile.
 search_service = SearchService(agents)
+orgs = OrgDirectory()
+DNS_SERVER = os.environ.get("DNS_SERVER", "bind")
+
+
+def fetch_card(url):
+    """Fetch an Agent Card for verification. Returns None on any fetch failure."""
+    if not isinstance(url, str) or urllib.parse.urlparse(url).scheme not in ("http", "https"):
+        return None
+    try:
+        response = requests.get(url, timeout=5)
+        response.raise_for_status()
+        body = response.json()
+    except (requests.RequestException, ValueError):
+        return None
+    return body if isinstance(body, dict) else None
+
+
+def lookup_txt(agent_id):
+    """TXT strings for _llm-agent._tcp.<agent_id> from the ACDP DNS server."""
+    try:
+        resolver = dns.resolver.Resolver(configure=False)
+        resolver.nameservers = [socket.gethostbyname(DNS_SERVER)]
+        answers = resolver.resolve(f"_llm-agent._tcp.{agent_id}", "TXT", lifetime=3)
+    except (dns.exception.DNSException, OSError):
+        return None
+    return [s.decode("utf-8") for rdata in answers for s in rdata.strings]
 
 # DNS-style agent ids, e.g. agent1.agents.local
 AGENT_ID_RE = re.compile(r"^(?=.{1,253}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$")
@@ -163,6 +193,7 @@ def register_agent():
             problem = _validate_card(data["agent_card"])
             if problem:
                 return jsonify({"error": problem}), 400
+            data["verification"] = verify_registration(data, fetch_card, lookup_txt, orgs)
 
         # Update or create agent
         now = time.time()
@@ -357,6 +388,15 @@ def update_shared_memory():
         logger.error(f"Error updating shared memory: {e}")
         logger.error(traceback.format_exc())
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/orgs/<normalized>", methods=["GET"])
+def get_org(normalized):
+    """Canonical domain of an organization (first registrant wins)."""
+    entry = orgs.get(normalize_org(normalized))
+    if not entry:
+        return jsonify({"error": "Organization not found"}), 404
+    return jsonify(entry)
 
 
 # Add a simple health check endpoint

@@ -35,8 +35,11 @@ def agent(agent_id="agent3.agents.local", **overrides):
 
 
 @pytest.fixture
-def client():
+def client(monkeypatch):
     registry_app.agents.clear()
+    registry_app.orgs.clear()
+    monkeypatch.setattr(registry_app, "fetch_card", lambda url: None)
+    monkeypatch.setattr(registry_app, "lookup_txt", lambda name: None)
     registry_app.app.config["TESTING"] = True
     return registry_app.app.test_client()
 
