@@ -5,8 +5,9 @@ import logging
 import random
 import time
 import uuid
+from collections import deque
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Deque, Dict, List, Optional, Tuple
 
 from pydantic import ValidationError
 from strands import Agent
@@ -89,6 +90,10 @@ class ArenaAgent:
         self.trust: Dict[str, Trust] = {}
         # Senders seen in the inbox stay reachable for replies on later ticks.
         self.known: Dict[str, Target] = {}
+        self.last_prompt = ""
+        self.last_decision: Optional[Dict[str, Any]] = None
+        self.decisions: Deque[Dict[str, Any]] = deque(maxlen=20)
+        self.counters = {"sent": 0, "received": 0, "rejected": 0, "errors": 0}
 
     @property
     def agent_id(self) -> str:
@@ -97,6 +102,28 @@ class ArenaAgent:
     def seed(self, thread_id: str, text: str) -> None:
         """Put a system note (the incident brief) in the inbox."""
         self.inbox.put_nowait(InboxItem(thread_id=thread_id, text=text))
+
+    def state(self) -> str:
+        """stopped, paused, or running."""
+        if self.ctx.stopped.is_set():
+            return "stopped"
+        return "running" if self.ctx.running.is_set() else "paused"
+
+    def _record(
+        self, prompt: str, decision: Optional[TurnDecision], outcome: str
+    ) -> None:
+        record = {
+            "agent": self.agent_id,
+            "prompt": prompt,
+            "decision": decision.model_dump(mode="json") if decision else None,
+            "outcome": outcome,
+        }
+        self.last_prompt = prompt
+        self.last_decision = record["decision"]
+        self.decisions.append(record)
+        if outcome.startswith("rejected: "):
+            self.counters["rejected"] += 1
+        self.ctx.bus.publish("decision.made", record)
 
     async def receive(self, message: ArenaMessage) -> Trust:
         """Verify an inbound message and queue it. No model call."""
@@ -116,6 +143,7 @@ class ArenaAgent:
             "status": trust.status,
             "reason": trust.reason,
         })
+        self.counters["received"] += 1
         self.inbox.put_nowait(InboxItem(message=message, trust=trust))
         return trust
 
@@ -189,11 +217,12 @@ class ArenaAgent:
             return "arena rate limit"
         return None
 
-    async def _send(self, target: Target, message: ArenaMessage) -> bool:
+    async def _send(self, target: Target, message: ArenaMessage) -> Optional[str]:
+        """Send with one retry. Returns None on success, else the error text."""
         for attempt in range(2):
             try:
                 await self.ctx.sender.send(target.base_url, message)
-                return True
+                return None
             except SendError as e:
                 if attempt == 0:
                     await self.ctx.sleep(self.ctx.retry_delay)
@@ -202,7 +231,8 @@ class ArenaAgent:
                     "id": message.id, "from_id": message.from_id,
                     "to_id": message.to_id, "error": str(e),
                 })
-        return False
+                return str(e)
+        return "send failed"
 
     async def tick(self) -> Optional[ArenaMessage]:
         """Run one decision cycle. Returns the sent message, or None."""
@@ -223,23 +253,29 @@ class ArenaAgent:
             self._requeue(items)
             raise
         if decision is None:
+            self._record(prompt, None, "rejected: invalid model output")
             self._requeue(items)
             return None
         if decision.action == "wait":
+            self._record(prompt, decision, "wait")
             return None
         if not self.ctx.running.is_set():
             # Pause drops the decision, not the inbox.
             self._reject("paused")
+            self._record(prompt, decision, "rejected: paused")
             self._requeue(items)
             return None
         reason = self._check(decision, targets)
         if reason:
             self._reject(reason)
+            self._record(prompt, decision, f"rejected: {reason}")
             return None
 
         thread_id = decision.thread_id
         if thread_id == NEW_THREAD:
-            thread = self.ctx.threads.open(self.agent_id, decision.body[:60])
+            thread = self.ctx.threads.open(
+                self.agent_id, decision.body[:60], cap=self.spec.thread_cap
+            )
             thread_id = thread.id
             self.ctx.bus.publish("thread.opened", {
                 "id": thread.id, "owner": thread.owner,
@@ -258,12 +294,18 @@ class ArenaAgent:
             body=decision.body,
             card_url=self.card_url,
         ).signed(self.identity)
-        if not await self._send(target, message):
+        error = await self._send(target, message)
+        if error is not None:
+            self._record(prompt, decision, f"failed: {error}")
             return None
 
         closed = self.ctx.threads.append(message)
         data = {k: v for k, v in message.payload().items() if k != "sig"}
         data["color"] = self.ctx.threads.get(thread_id).color
+        data["looking_for"] = decision.looking_for
+        data["why_this_peer"] = decision.why_this_peer
+        self.counters["sent"] += 1
+        self._record(prompt, decision, "sent")
         self.ctx.bus.publish("message.sent", data)
         if closed:
             self.ctx.bus.publish("thread.closed", {"id": thread_id, "reason": closed})
@@ -281,6 +323,7 @@ class ArenaAgent:
                 await self.tick()
                 backoff = 0.0
             except Exception as e:  # one failing agent must not stop the arena
+                self.counters["errors"] += 1
                 logger.exception(f"{self.agent_id} tick failed")
                 self.ctx.bus.publish(
                     "agent.error", {"id": self.agent_id, "error": str(e) or type(e).__name__}

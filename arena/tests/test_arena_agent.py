@@ -34,6 +34,10 @@ def make_agent(script, ctx=None, **spec_change):
     return agent, ctx, ident, model
 
 
+def last_rejected(ctx):
+    return [e for e in ctx.bus.history if e["type"] == "decision.rejected"][-1]["data"]
+
+
 def types(ctx):
     return [e["type"] for e in ctx.bus.history]
 
@@ -53,7 +57,7 @@ def test_tick_sends_signed_message_on_new_thread():
         "http://arena:8080/agents/northgate-soc/.well-known/agent-card.json"
     )
     assert verify_signature(message.payload(), ident.public_jwk())
-    assert types(ctx) == ["discovery.query", "thread.opened", "message.sent"]
+    assert types(ctx) == ["discovery.query", "thread.opened", "decision.made", "message.sent"]
     assert ctx.threads.get("t1").messages == [message]
     assert ctx.guard.calls == 1
 
@@ -71,14 +75,14 @@ def test_tick_rejects_self_and_unknown_targets():
     ):
         agent, ctx, _, _ = make_agent(lambda prompt, t=target: send(to=t))
         assert asyncio.run(agent.tick()) is None
-        assert ctx.bus.history[-1]["data"] == {"agent": agent.agent_id, "reason": reason}
+        assert last_rejected(ctx) == {"agent": agent.agent_id, "reason": reason}
         assert ctx.sender.sent == []
 
 
 def test_unknown_thread_and_rate_limit_are_rejected():
     agent, ctx, _, _ = make_agent(lambda prompt: send(thread_id="t7"))
     asyncio.run(agent.tick())
-    assert ctx.bus.history[-1]["data"]["reason"] == "unknown thread"
+    assert last_rejected(ctx)["reason"] == "unknown thread"
 
     ctx = make_ctx(acdp=FakeAcdp(), rate_per_min=1)
     ctx.acdp.entries[PEER_ID] = PEER
@@ -86,7 +90,7 @@ def test_unknown_thread_and_rate_limit_are_rejected():
     agent, ctx, _, model = make_agent(lambda prompt: send(), ctx=ctx)
     agent.seed("t1", "Brief.")
     asyncio.run(agent.tick())
-    assert ctx.bus.history[-1]["data"]["reason"] == "arena rate limit"
+    assert last_rejected(ctx)["reason"] == "arena rate limit"
     assert model.calls == 0
     assert agent.inbox.qsize() == 1
 
@@ -95,7 +99,7 @@ def test_invalid_model_output_is_rejected():
     replies = iter([{"action": "maybe"}])
     agent, ctx, _, _ = make_agent(lambda prompt: next(replies, "I cannot decide."))
     assert asyncio.run(agent.tick()) is None
-    assert ctx.bus.history[-1]["data"]["reason"] == "invalid model output"
+    assert last_rejected(ctx)["reason"] == "invalid model output"
 
 
 def test_decision_made_while_paused_is_dropped():
@@ -105,7 +109,7 @@ def test_decision_made_while_paused_is_dropped():
 
     agent, ctx, _, _ = make_agent(pause_then_send)
     asyncio.run(agent.tick())
-    assert ctx.bus.history[-1]["data"]["reason"] == "paused"
+    assert last_rejected(ctx)["reason"] == "paused"
     assert ctx.sender.sent == []
 
 
@@ -117,7 +121,7 @@ def test_send_failure_retries_once_then_reports():
 
     agent, ctx, _, _ = make_agent(lambda p: send(), ctx=make_ctx(acdp=acdp, sender=FakeSender(2)))
     assert asyncio.run(agent.tick()) is None
-    assert ctx.bus.history[-1]["type"] == "message.failed"
+    assert [e for e in ctx.bus.history if e["type"] == "message.failed"]
     assert ctx.threads.get("t1").messages == []
 
 
@@ -241,3 +245,52 @@ def test_failed_check_does_not_overwrite_a_verified_peer():
     ctx.verifier = FixedVerifier(Trust("failed", "sender mismatch"))
     asyncio.run(agent.receive(inbound(PEER_ID, agent.agent_id, "a2")))
     assert agent.trust[PEER_ID] == Trust("verified")
+
+
+def made(ctx):
+    return [e["data"] for e in ctx.bus.history if e["type"] == "decision.made"]
+
+
+def test_sent_decision_is_recorded_with_prompt_and_intent():
+    decision = dict(send(), looking_for="campaign attribution", why_this_peer="only peer")
+    agent, ctx, _, _ = make_agent(lambda prompt: decision)
+    asyncio.run(agent.tick())
+    record = made(ctx)[-1]
+    assert record["outcome"] == "sent"
+    assert record["decision"]["looking_for"] == "campaign attribution"
+    assert "PEERS" in record["prompt"]
+    sent = [e["data"] for e in ctx.bus.history if e["type"] == "message.sent"][-1]
+    assert (sent["looking_for"], sent["why_this_peer"]) == ("campaign attribution", "only peer")
+    assert agent.counters["sent"] == 1
+    assert agent.last_prompt == record["prompt"]
+    assert list(agent.decisions)[-1] == record
+
+
+def test_wait_invalid_and_rejected_outcomes_are_recorded():
+    agent, ctx, _, _ = make_agent(lambda prompt: {"action": "wait"})
+    asyncio.run(agent.tick())
+    assert made(ctx)[-1]["outcome"] == "wait"
+
+    replies = iter([{"action": "maybe"}])
+    agent, ctx, _, _ = make_agent(lambda prompt: next(replies, "no tool"))
+    asyncio.run(agent.tick())
+    assert made(ctx)[-1] == {"agent": agent.agent_id, "prompt": made(ctx)[-1]["prompt"],
+                             "decision": None, "outcome": "rejected: invalid model output"}
+
+    agent, ctx, _, _ = make_agent(lambda prompt: send(to="nobody.example"))
+    asyncio.run(agent.tick())
+    assert made(ctx)[-1]["outcome"] == "rejected: unknown target"
+    assert agent.counters["rejected"] == 1
+
+
+def test_failed_send_outcome_and_state():
+    acdp = FakeAcdp()
+    acdp.entries[PEER_ID] = PEER
+    agent, ctx, _, _ = make_agent(lambda p: send(), ctx=make_ctx(acdp=acdp, sender=FakeSender(2)))
+    asyncio.run(agent.tick())
+    assert made(ctx)[-1]["outcome"].startswith("failed: ")
+    assert agent.state() == "running"
+    ctx.running.clear()
+    assert agent.state() == "paused"
+    ctx.stopped.set()
+    assert agent.state() == "stopped"

@@ -124,3 +124,11 @@ def test_run_guard_limits_calls_and_time():
     other = RunGuard(max_minutes=1, max_calls=99, clock=clock)
     clock.t = 61.0
     assert other.exceeded() == "time limit reached"
+
+
+def test_turn_decision_intent_fields():
+    d = TurnDecision(action="send", looking_for="attribution", why_this_peer="only verified")
+    assert (d.looking_for, d.why_this_peer) == ("attribution", "only verified")
+    assert TurnDecision(action="wait").looking_for == ""
+    long = TurnDecision(action="send", looking_for="x" * 250, why_this_peer="y" * 201)
+    assert (len(long.looking_for), len(long.why_this_peer)) == (200, 200)
