@@ -1,4 +1,5 @@
-FROM ubuntu/bind9:latest
+# Pinned: ubuntu/bind9:latest is based on Ubuntu 24.10, whose package archive is gone.
+FROM ubuntu/bind9:9.18-24.04_beta
 
 # Copy configuration files
 COPY named.conf /etc/bind/
@@ -8,6 +9,7 @@ COPY scripts/ /usr/local/bin/
 # Make scripts executable
 RUN chmod +x /usr/local/bin/update_zone.sh
 RUN chmod +x /usr/local/bin/dns_api.py
+RUN chmod +x /usr/local/bin/add_zone.sh /usr/local/bin/start.sh
 
 # Install required packages for dynamic DNS updates
 RUN apt-get update && \
@@ -19,4 +21,4 @@ RUN apt-get update && \
 EXPOSE 53/tcp 53/udp 8053/tcp
 
 # Start named in foreground with DNS API
-CMD ["bash", "-c", "named -g -c /etc/bind/named.conf & python3 /usr/local/bin/dns_api.py"]
+CMD ["/usr/local/bin/start.sh"]

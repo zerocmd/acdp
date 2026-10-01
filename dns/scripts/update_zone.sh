@@ -11,6 +11,8 @@ IP_ADDRESS=$6
 A2A_CARD_PATH=$7     # ACDP 1.1: path of the A2A Agent Card, e.g. /.well-known/agent-card.json
 PROTOCOLS=$8         # ACDP 1.1: e.g. a2a/0.3,rest-json
 VERSION=${9:-1.0}    # ACDP protocol version
+KEY=${10}            # ACDP arena: base64url SHA-256 fingerprint of the Ed25519 key
+ZONE=${11:-agents.local}
 
 # Default IP if not provided
 if [ -z "$IP_ADDRESS" ]; then
@@ -38,13 +40,16 @@ fi
 if [ -n "$A2A_CARD_PATH" ]; then
     TXT="$TXT \"a2a=$A2A_CARD_PATH\""
 fi
+if [ -n "$KEY" ]; then
+    TXT="$TXT \"key=$KEY\""
+fi
 
 # Create a temporary file for nsupdate commands
 NSUPDATE_FILE=$(mktemp)
 
 cat > $NSUPDATE_FILE << NSUPDATE_EOF
 server localhost
-zone agents.local
+zone $ZONE
 update delete $DOMAIN A
 update delete _llm-agent._tcp.$DOMAIN SRV
 update delete _llm-agent._tcp.$DOMAIN TXT
