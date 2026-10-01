@@ -133,3 +133,25 @@ def test_lookups():
     assert asyncio.run(acdp.find("threat-intel"))[0]["id"] == "a"
     assert asyncio.run(acdp.org("Halcyon Intel"))["canonical_domain"] == "x.example"
     assert asyncio.run(acdp.dns_agent("a.x.example"))["key"] == "k"
+
+
+def test_dns_api_connection_errors_are_retried_but_400_is_not():
+    attempts = []
+
+    def flaky(request):
+        attempts.append(1)
+        if len(attempts) < 3:
+            raise httpx.ConnectError("not up yet", request=request)
+        return httpx.Response(200, json={"status": "success", "result": "created"})
+
+    acdp = AcdpClient("http://bind:8053", FakeRegistry(), FakeResolver(),
+                      lambda: httpx.AsyncClient(transport=httpx.MockTransport(flaky)),
+                      sleep=no_sleep)
+    assert asyncio.run(acdp.create_zone("x.example")) == "created"
+    assert len(attempts) == 3
+
+    seen = []
+    refused = client(seen, status=400, body={"status": "error", "message": "bad zone"})
+    with pytest.raises(AcdpError, match="bad zone"):
+        asyncio.run(refused.create_zone("evil.com"))
+    assert len(seen) == 1

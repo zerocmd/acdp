@@ -5,7 +5,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, Mapping, Optional
+from typing import Any, Callable, Dict, Mapping, Optional, Set
 
 import httpx
 from fastapi import FastAPI
@@ -91,6 +91,8 @@ class Arena:
         self.app = FastAPI(title="ACDP Agent Arena")
         self.agents: Dict[str, ArenaAgent] = {}
         self.tasks: Dict[str, asyncio.Task] = {}
+        # Slugs reserved by an add_agent call that has not finished yet.
+        self._pending: Set[str] = set()
         self.live = False
         self._guard_task: Optional[asyncio.Task] = None
         self.replay_task: Optional[asyncio.Task] = None
@@ -130,10 +132,19 @@ class Arena:
         """
         if misconfigure not in MISCONFIGURE:
             raise InjectionError(f"misconfigure must be one of {MISCONFIGURE}")
-        if not SLUG_RE.fullmatch(spec.slug) or spec.slug in self.agents:
+        taken = spec.slug in self.agents or spec.slug in self._pending
+        if not SLUG_RE.fullmatch(spec.slug) or taken:
             raise InjectionError(f"slug {spec.slug!r} is invalid or in use")
         if not DOMAIN_RE.fullmatch(spec.domain):
             raise InjectionError(f"invalid domain {spec.domain!r}")
+        # Reserve the slug before the first await so a concurrent call sees it.
+        self._pending.add(spec.slug)
+        try:
+            return await self._add_agent(spec, misconfigure)
+        finally:
+            self._pending.discard(spec.slug)
+
+    async def _add_agent(self, spec: AgentSpec, misconfigure: str) -> ArenaAgent:
         acdp = self.ctx.acdp
         try:
             await acdp.create_zone(spec.domain)

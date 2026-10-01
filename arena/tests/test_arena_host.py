@@ -118,3 +118,26 @@ def test_generate_prompt_uses_sonnet_generator():
                        scripts={"_generator": lambda prompt: "You find mule accounts."})
     text = asyncio.run(arena.generate_prompt("Fraud Desk", "Coastal Bank", "fraud", "x"))
     assert text == "You find mule accounts."
+
+
+def test_concurrent_injection_of_one_slug_admits_exactly_one():
+    arena = make_arena(make_cast(SOC, owner="northgate-soc", closer="northgate-soc"))
+    asyncio.run(arena.setup())
+    acdp = arena.ctx.acdp
+    original = acdp.create_zone
+
+    async def slow_zone(zone):
+        await asyncio.sleep(0.01)   # let the second request run its checks
+        return await original(zone)
+
+    acdp.create_zone = slow_zone
+    spec = AgentSpec.from_dict(spec_dict(slug="twin", organization="Twin Co",
+                                         domain="twin.example"))
+
+    async def run():
+        return await asyncio.gather(arena.add_agent(spec), arena.add_agent(spec),
+                                    return_exceptions=True)
+
+    results = asyncio.run(run())
+    assert sum(isinstance(r, InjectionError) for r in results) == 1
+    assert [e["slug"] for e in events(arena, "agent.registered")].count("twin") == 1

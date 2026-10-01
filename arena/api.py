@@ -1,6 +1,7 @@
 """HTTP and WebSocket surface of the arena: UI, event stream, and controls."""
 
 import asyncio
+import contextlib
 import logging
 import re
 from pathlib import Path
@@ -127,6 +128,11 @@ def register_routes(arena: Arena, ui_dir: Path, runs_dir: Path) -> None:
         if not path.is_file():
             return JSONResponse({"error": "log not found"}, status_code=404)
         events = load_log(path)
+        previous = arena.replay_task
+        if previous is not None and not previous.done():
+            previous.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await previous
         await arena.stop("replay")
         arena.bus.reset(f"replay-{body.log}", note={"log": body.log, "speed": body.speed})
         arena.replay_task = asyncio.create_task(replay(events, arena.bus, body.speed))

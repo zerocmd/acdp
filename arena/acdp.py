@@ -46,11 +46,18 @@ class AcdpClient:
         self.retry_delay = retry_delay
 
     async def _post_dns(self, path: str, body: Dict[str, Any]) -> Dict[str, Any]:
-        async with self.http_factory() as http:
-            try:
-                response = await http.post(f"{self.dns_api_url}{path}", json=body)
-            except httpx.HTTPError as e:
-                raise AcdpError(f"DNS API unreachable: {e}") from e
+        """POST to the DNS API. Retries connection errors; a refusal fails at once."""
+        response = None
+        for attempt in range(self.register_attempts):
+            async with self.http_factory() as http:
+                try:
+                    response = await http.post(f"{self.dns_api_url}{path}", json=body)
+                    break
+                except httpx.HTTPError as e:
+                    logger.warning(f"DNS API attempt {attempt + 1} failed: {e}")
+                    if attempt == self.register_attempts - 1:
+                        raise AcdpError(f"DNS API unreachable: {e}") from e
+            await self.sleep(self.retry_delay)
         try:
             result = response.json()
         except ValueError:

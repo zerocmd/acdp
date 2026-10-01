@@ -31,7 +31,13 @@ export function createControls() {
   }
   $("replay").addEventListener("click", async () => {
     const log = $("logs").value;
-    if (log) await post("/arena/replay", { log, speed: Number($("speed").value) });
+    if (!log) return;
+    $("replay").disabled = true;
+    try {
+      await post("/arena/replay", { log, speed: Number($("speed").value) });
+    } finally {
+      $("replay").disabled = false;
+    }
   });
 
   $("add").addEventListener("click", () => { error.textContent = ""; dialog.showModal(); });
@@ -44,12 +50,16 @@ export function createControls() {
       needs: (data.needs || "").split(",").map((s) => s.trim()).filter(Boolean),
       generate: data.generate === "on",
     };
+    const submit = form.querySelector('button[type="submit"]');
+    submit.disabled = true;
     try {
       await post("/arena/agents", body);
       form.reset();
       dialog.close();
     } catch (e) {
       error.textContent = e.message;
+    } finally {
+      submit.disabled = false;
     }
   });
 

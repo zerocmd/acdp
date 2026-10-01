@@ -99,3 +99,17 @@ def test_logs_and_replay(setup):
         "bus.reset", "agent.registered", "message.sent"]
     assert client.post("/arena/replay", json={"log": "nope"}).status_code == 404
     assert client.post("/arena/replay", json={"log": "../x"}).status_code == 422
+
+
+def test_new_replay_replaces_a_running_replay(setup):
+    arena, client, runs = setup
+    slow = [{"seq": i, "ts": float(i), "run_id": "slow", "type": "slow.event", "data": {}}
+            for i in range(5)]
+    fast = [{"seq": 0, "ts": 0.0, "run_id": "fast", "type": "fast.event", "data": {}}]
+    (runs / "slow.jsonl").write_text("\n".join(json.dumps(e) for e in slow) + "\n")
+    (runs / "fast.jsonl").write_text(json.dumps(fast[0]) + "\n")
+    client.post("/arena/replay", json={"log": "slow", "speed": 1})
+    client.post("/arena/replay", json={"log": "fast", "speed": 1})
+    time.sleep(1.5)
+    types = [e["type"] for e in arena.bus.history]
+    assert types == ["bus.reset", "fast.event"]
