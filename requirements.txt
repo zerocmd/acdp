@@ -3,3 +3,4 @@
 -r registry/requirements.txt
 colorama==0.4.6
 pytest>=8
+-r arena/requirements.txt
