@@ -40,25 +40,36 @@ def capability_to_skill(capability: str) -> AgentSkill:
 
 
 def acdp_extension(config: Dict[str, Any]) -> AgentExtension:
+    params: Dict[str, Any] = {
+        "acdp_version": config.get("acdp_version", "1.1"),
+        "id": config["id"],
+        "capabilities": list(config.get("capabilities", [])),
+        "dns_srv": f"_llm-agent._tcp.{config['id']}",
+        "registry": config.get("registry_url"),
+        "endpoints": {
+            k: v
+            for k, v in (config.get("endpoints") or {}).items()
+            if k in ("metadata", "peers", "ping", "assist")
+        },
+        "max_delegation_depth": (config.get("collaboration") or {}).get(
+            "max_delegation_depth", 2
+        ),
+    }
+    identity_keys = {
+        "did": "did",
+        "organization": "organization",
+        "domain": "domain",
+        "publicKeyJwk": "publicKeyJwk",
+        "model_name": "model",
+    }
+    for config_key, param_key in identity_keys.items():
+        if config.get(config_key):
+            params[param_key] = config[config_key]
     return AgentExtension(
         uri=ACDP_EXTENSION_URI,
         description="ACDP discovery identity and delegation-trace metadata",
         required=False,
-        params={
-            "acdp_version": config.get("acdp_version", "1.1"),
-            "id": config["id"],
-            "capabilities": list(config.get("capabilities", [])),
-            "dns_srv": f"_llm-agent._tcp.{config['id']}",
-            "registry": config.get("registry_url"),
-            "endpoints": {
-                k: v
-                for k, v in (config.get("endpoints") or {}).items()
-                if k in ("metadata", "peers", "ping", "assist")
-            },
-            "max_delegation_depth": (config.get("collaboration") or {}).get(
-                "max_delegation_depth", 2
-            ),
-        },
+        params=params,
     )
 
 

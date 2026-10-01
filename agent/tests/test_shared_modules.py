@@ -77,3 +77,42 @@ def test_registry_client_get_org(monkeypatch):
     assert client.get_org("Halcyon Intel")["canonical_domain"] == "halcyon-intel.example"
     assert client.get_org("Nobody Inc") is None
     assert calls[0] == "http://registry:5000/orgs/halcyonintel"
+
+
+def _card_config(**extra):
+    config = {
+        "id": "halcyon-intel.halcyon-intel.example",
+        "name": "Threat Intel Analyst",
+        "description": "Threat intelligence",
+        "capabilities": ["threat-intel"],
+        "interfaces": {"a2a": "http://arena:8080/agents/halcyon-intel/"},
+    }
+    config.update(extra)
+    return config
+
+
+def test_card_carries_identity_params_when_configured():
+    from runtime.a2a_card import build_agent_card, card_acdp_params
+
+    jwk = {"kty": "OKP", "crv": "Ed25519", "x": "abc"}
+    card = build_agent_card(_card_config(
+        did="did:web:halcyon-intel.example:agents:halcyon-intel",
+        organization="Halcyon Intel",
+        domain="halcyon-intel.example",
+        publicKeyJwk=jwk,
+        model_name="claude-sonnet-5-5",
+    ))
+    params = card_acdp_params(card.model_dump(mode="json", exclude_none=True))
+    assert params["did"] == "did:web:halcyon-intel.example:agents:halcyon-intel"
+    assert params["organization"] == "Halcyon Intel"
+    assert params["domain"] == "halcyon-intel.example"
+    assert params["publicKeyJwk"] == jwk
+    assert params["model"] == "claude-sonnet-5-5"
+
+
+def test_card_omits_identity_params_when_not_configured():
+    from runtime.a2a_card import build_agent_card, card_acdp_params
+
+    card = build_agent_card(_card_config())
+    params = card_acdp_params(card.model_dump(mode="json", exclude_none=True))
+    assert not {"did", "organization", "domain", "publicKeyJwk", "model"} & params.keys()
