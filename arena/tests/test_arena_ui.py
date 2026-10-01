@@ -15,7 +15,8 @@ UI_FILES = ["preact.js", "api.js", "app.js", "store.js", "palette.js", "style.cs
             "components/topbar.js", "components/sidebar.js", "components/viewswitch.js",
             "components/legend.js", "components/addagent.js", "components/chat.js",
             "views/network.js", "components/timeline.js", "lib/layout.js",
-            "components/drawer.js", "components/steps.js"]
+            "components/drawer.js", "components/steps.js",
+            "components/registry.js", "lib/diff.js"]
 
 
 def test_ui_files_are_served(tmp_path):

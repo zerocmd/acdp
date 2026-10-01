@@ -93,3 +93,14 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; }
 code.txt { display: inline-block; margin: 1px 4px 1px 0; }
 .chip.new { background: var(--search); color: #fff; }
 .query { border-bottom: 1px solid var(--line); padding: 4px 0; }
+
+.registry { padding: 8px; }
+.toolbar { display: flex; gap: 6px; margin-bottom: 8px; }
+.toolbar input { flex: 1; }
+.toolbar button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.grid { width: 100%; border-collapse: collapse; }
+.grid th { text-align: left; color: var(--muted); font-weight: 500; border-bottom: 1px solid var(--line); }
+.grid td { border-bottom: 1px solid var(--line); padding: 4px; vertical-align: top; }
+.grid tr.row { cursor: pointer; } .grid tr.row:hover { background: var(--panel-2); }
+.banner { background: var(--bad); color: #fff; padding: 6px 10px; border-radius: 6px; margin-bottom: 8px; }
+.split2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }

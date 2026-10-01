@@ -10,11 +10,15 @@ import { Chat } from "./components/chat.js";
 import { NetworkView } from "./views/network.js";
 import { Timeline } from "./components/timeline.js";
 import { Drawer } from "./components/drawer.js";
+import { RegistryView } from "./components/registry.js";
 
 const store = createStore();
 
 // Tasks 10, 13, 14, and 15 add entries.
-export const VIEWS = { network: ["Network", NetworkView] };
+export const VIEWS = {
+  network: ["Network", NetworkView],
+  registry: ["Registry", RegistryView],
+};
 
 export function RIGHT(state) {
   return state.selection.agent && state.agents[state.selection.agent] ? Drawer : Chat;
