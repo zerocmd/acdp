@@ -26,6 +26,8 @@ The impostor passes checks 1–4 for its own domain. It fails check 5, because H
 
 ## Start
 
+For step-by-step instructions, checks, and troubleshooting, see [arena/README.md](arena/README.md).
+
 ```bash
 export ANTHROPIC_API_KEY=your_api_key_here
 docker compose up -d --build
