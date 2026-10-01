@@ -76,13 +76,55 @@ dig @localhost _llm-agent._tcp.halcyon-intel.halcyon-intel.example TXT +short
 
 The TXT record includes `key=` followed by a 43-character fingerprint.
 
-## Step 5: Open the UI
+## Step 5: Open the Workbench
 
-Open <http://localhost:8080>.
+Open <http://localhost:8080>. The Workbench has five areas:
 
-- **Graph (left):** one node for each agent, grouped by domain. `S` means Sonnet and `H` means Haiku. The border shows verification: green is verified, amber is pending, and red is failed. An animated edge shows each message, in the color of its thread.
-- **Transcript (right):** every message with sender, recipient, thread color, and intent. Gray lines show registration, verification, and thread events. Use the filters to show one thread, agent, company, or intent. Click a node to filter to that agent. Click **Clear** to show everything again.
-- **Control bar (top):** counts of agents, messages, and open threads, the **Pause** button, the replay controls, and **Add agent**.
+| Area | What it shows |
+| --- | --- |
+| Top bar | The run mode (`live`, `replay`, `idle`, `stopped`), counts of agents, messages, and open threads, **Pause**/**Resume**, the replay controls, and **+ Agent**. |
+| Sidebar (left) | The agents, grouped by company, with a status dot (green verified, amber pending, red failed) and a model badge (`S` Sonnet, `H` Haiku). Below it, a registry summary. Click an agent to open its details. |
+| View area (center) | Five views. Switch between them with the buttons above the area. |
+| Timeline (below the view) | Four lanes: Register, Discover, Verify, and Message. Each dot is one event. Hover a dot for a summary. Click it to open the agent. Drag across the strip to set a time range; the views and the chat then show only that range. |
+| Right column | The chat, or the agent drawer when an agent is selected. |
+
+Press Esc to clear the selection and the time range.
+
+### Views
+
+| View | Use it to see |
+| --- | --- |
+| Network | Who talks to whom. Each company is an outline with a small label. Each pair of agents has one edge per thread; red edges are declines and challenges. During a discovery search, the searcher gets a purple ring and dashed purple lines to each result, for about 2 seconds. Results that are new to the searcher show "new". Select **show every search** to highlight every query, not only queries with new results. |
+| Sequence | The order of events. One lane per agent; time flows down. Arrows are messages, labelled with their intent. Purple diamonds are discovery searches; green diamonds are verification checks. Brackets on the requester's lane show A2A tasks from request to answer. |
+| Flow | The shape of one thread, left to right from the agent that opened it. Replies and loops curve back as dashed lines. |
+| Matrix | Senders (rows) by recipients (columns). Darker cells mean more messages. A red border means the recipient's trust check failed. Click a cell to show only that pair in the chat. |
+| Registry | The registry's entries. Search and filter by status. Expand a row to see each verification check, the stored entry, and the stored card next to the live card. The **Organizations** tab shows which domain anchors each organization name. |
+
+### Chat
+
+The chat shows one thread at a time. Pick a thread with the chips at the top, or click **All threads** to see every message in time order. Each message shows the sender, company, domain, recipient, intent, and the recipient's trust check. A purple line shows what the sender was looking for and why it picked this peer. A message that failed the trust check has a dashed red border. A request shows the state of its A2A task: `working`, `completed`, `rejected`, or `canceled`.
+
+### Agent drawer
+
+| Tab | What it shows |
+| --- | --- |
+| Overview | Role, capability, needs, cadence, state, counters, the seven registration steps (identity, zone, DNS, card, submitted, registry checks, result), and the DNS records as published. |
+| Card | The live Agent Card: a summary and the raw JSON. If the live card is not available, the stored registry card. |
+| Prompts | The system prompt, the last turn prompt as the model received it, and the last decision with its outcome. |
+| Activity | The agenda, the agent's threads, its pending inbox (live runs only), its recent decisions, and its A2A tasks. |
+| Discovery | Each search with its results and their registry status, the peers the agent chose and why, and its trust map. |
+
+In a replay, data that only a live agent can give shows "Not available in replay".
+
+### Make a demo run without credits
+
+```bash
+PYTHONPATH=agent:. python arena/scripts/make_demo_log.py
+```
+
+The script writes `runs/demo.jsonl` from a scripted run: no model calls and no network. Select `demo` in the replay controls and click **Replay**.
+
+Run logs include the full turn prompt of every decision. A 20-minute live run makes a log of about 5 to 10 MB.
 
 ## Step 6: Watch the run
 
@@ -93,6 +135,8 @@ What to look for:
 3. The impostor sends its first message after 2 to 3 minutes. Peers see `trust=failed (domain mismatch)` and send `decline` or `challenge`. The UI shows these in red.
 4. The ISAC Coordinator closes `t1` with a `verdict` after at least three investigation agents have shared findings.
 5. The procurement, exposure, and sales agents run their own threads at the same time.
+
+In the Network view, watch for discovery: when an agent searches the registry, purple lines connect it to each result. After you add an agent, the next search by an agent that needs its capability marks it "new".
 
 Click **Pause** to freeze all agents. Click **Resume** to continue.
 
@@ -244,6 +288,12 @@ pytest
 ```
 
 The tests need no API key, no containers, and no network.
+
+The UI has its own tests for the event store and the layout helpers. They need Node 22 or later:
+
+```bash
+node --test "arena/ui/tests/*.test.mjs"
+```
 
 To check a live run (this costs credits), start the stack and run:
 

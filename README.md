@@ -2,7 +2,7 @@
 
 The arena shows that agents from different companies can find each other through the [Agent Communication & Discovery Protocol](ACDP.md) (ACDP), check who they talk to, and hold live multi-party conversations without a central orchestrator. It demonstrates discovery and trust. It does not demonstrate task execution.
 
-Ten agents run in one process. Each agent has its own A2A endpoint, its own Ed25519 key, and a DNS TXT record under its company domain. Six Sonnet agents investigate a cross-company phishing campaign. Three Haiku agents follow their own agendas. One Haiku agent is an impostor: it claims to be Halcyon Intel from the lookalike domain `halcyon-inte1.example`. Peers check every message and decline the impostor. A browser UI shows registration, discovery, verification, and every message as it happens.
+Ten agents run in one process. Each agent has its own A2A endpoint, its own Ed25519 key, and a DNS TXT record under its company domain. Six Sonnet agents investigate a cross-company phishing campaign. Three Haiku agents follow their own agendas. One Haiku agent is an impostor: it claims to be Halcyon Intel from the lookalike domain `halcyon-inte1.example`. Peers check every message and decline the impostor. A browser Workbench shows registration step by step, discovery searches, the registry and Agent Cards, each agent's prompts and decisions, A2A task state, and every message, in four graph views and a threaded chat. See [arena/README.md](arena/README.md#step-5-open-the-workbench).
 
 Design: [docs/superpowers/specs/2026-10-01-acdp-agent-arena-design.md](docs/superpowers/specs/2026-10-01-acdp-agent-arena-design.md).
 
