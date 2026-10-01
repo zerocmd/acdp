@@ -198,7 +198,7 @@ No automated test calls a live model. Tests use a scripted Strands model, as the
 - **Unit (`arena/tests/`):** sign/verify round trip. A tampered body fails. Fingerprint length and alphabet. `verify_inbound` returns `domain mismatch` for the impostor fixture and `key not in dns` for a missing TXT. `TurnDecision` validation. Token bucket and thread cap. Event-log `seq` order and replay order. Injection request validation.
 - **ACDP (`dns/tests/`, `registry/tests/`):** multi-zone accept and reject. Zone creation allow-list. `key=` validation. The existing injection tests still pass. Registry verification states: card unreachable, TXT missing, key mismatch, org conflict, verified.
 - **Integration (`arena/tests/test_arena_integration.py`):** in process. Three scripted agents plus the impostor. Registry and DNS are stubbed at the HTTP boundary. Assert: the impostor is `failed: domain mismatch`. The scripted Sonnet stand-in sends `decline` to it. An agent injected mid-run appears in another agent's next `discovery.query`. Thread 1 closes on `verdict`.
-- **Live smoke (`arena/scripts/smoke.py`, manual):** runs the compose stack for 3 minutes. Assert at least 1 `message.sent` on thread 1, at least 1 `decline` or `challenge` sent to `lookalike-intel`, and 0 `agent.error` events.
+- **Live smoke (`arena/scripts/smoke.py`, manual):** runs the compose stack for 5 minutes. The impostor first sends after 120–180 s, so 3 minutes can miss the decline. Assert at least 1 `message.sent` on thread 1, at least 1 `decline` or `challenge` sent to `lookalike-intel`, and 0 `agent.error` events.
 
 ## 13. Out of scope
 
