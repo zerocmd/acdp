@@ -1,3 +1,4 @@
 cryptography>=44
 pyyaml>=6
 uvicorn>=0.30
+websockets>=13

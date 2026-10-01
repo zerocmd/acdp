@@ -1,4 +1,4 @@
-# ACDP Agent Arena stack. Task 19 adds the arena service.
+# ACDP Agent Arena stack: DNS, registry, and the arena runtime.
 services:
   bind:
     build:
@@ -38,6 +38,36 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  arena:
+    build:
+      context: .
+      dockerfile: arena/DockerFile
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      MODEL_PROVIDER: ${MODEL_PROVIDER:-anthropic}
+      MODEL_ID_SONNET: ${MODEL_ID_SONNET:-}
+      MODEL_ID_HAIKU: ${MODEL_ID_HAIKU:-}
+      AWS_REGION: ${AWS_REGION:-}
+      REGISTRY_URL: http://registry:5000
+      DNS_API_URL: http://bind:8053
+      DNS_SERVER: bind
+      ARENA_PUBLIC_URL: http://arena:8080
+      ARENA_HOST: arena
+      ARENA_MAX_MINUTES: ${ARENA_MAX_MINUTES:-20}
+      ARENA_MAX_MODEL_CALLS: ${ARENA_MAX_MODEL_CALLS:-600}
+      ARENA_RUNS_DIR: /app/runs
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./runs:/app/runs
+    depends_on:
+      registry:
+        condition: service_healthy
+      bind:
+        condition: service_started
+    networks:
+      - acdp
 
 networks:
   acdp:
