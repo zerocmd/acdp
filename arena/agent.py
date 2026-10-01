@@ -107,6 +107,49 @@ class ArenaAgent:
         """Put a system note (the incident brief) in the inbox."""
         self.inbox.put_nowait(InboxItem(thread_id=thread_id, text=text))
 
+    def summary(self) -> Dict[str, Any]:
+        """Short view for the agent list."""
+        spec = self.spec
+        return {
+            "id": self.agent_id, "slug": spec.slug, "name": spec.name,
+            "organization": spec.organization, "domain": spec.domain,
+            "capability": spec.capability, "needs": list(spec.needs),
+            "model": spec.model, "role": spec.role, "state": self.state(),
+            "counters": dict(self.counters), "verification": dict(self.verification),
+        }
+
+    def detail(self) -> Dict[str, Any]:
+        """Full view for the agent drawer (live mode)."""
+        # asyncio.Queue keeps its items in a deque; read it without draining.
+        pending = list(self.inbox._queue)
+        inbox = [
+            {"sender": item.message.from_id, "intent": item.message.intent.value,
+             "trust": item.trust.status if item.trust else None,
+             "thread_id": item.message.thread_id}
+            if item.message else
+            {"sender": "system", "intent": "seed", "trust": None,
+             "thread_id": item.thread_id}
+            for item in pending
+        ]
+        threads = [
+            {"id": t.id, "title": t.title, "owner": t.owner, "open": not t.closed,
+             "count": len(t.messages)}
+            for t in self.ctx.threads.for_agent(self.agent_id)
+        ]
+        return {
+            **self.summary(),
+            "system_prompt": system_prompt(self.spec),
+            "last_prompt": self.last_prompt,
+            "last_decision": self.last_decision,
+            "decisions": list(self.decisions),
+            "threads": threads,
+            "inbox": inbox,
+            "trust": {k: {"status": v.status, "reason": v.reason}
+                      for k, v in self.trust.items()},
+            "queries": list(self.queries),
+            "dns": dict(self.dns),
+        }
+
     def state(self) -> str:
         """stopped, paused, or running."""
         if self.ctx.stopped.is_set():

@@ -121,6 +121,21 @@ class FakeAcdp:
     async def dns_agent(self, agent_id: str) -> Optional[Dict[str, Any]]:
         return self.dns.get(agent_id)
 
+    async def registry_get(self, path: str):
+        if path == "/agents":
+            return 200, {"agents": [
+                {k: v for k, v in e.items() if k != "agent_card"}
+                for e in self.entries.values()]}
+        if path == "/orgs":
+            return 200, {"orgs": sorted(self.orgs.values(),
+                                        key=lambda o: o["organization"].lower())}
+        if path.startswith("/agents/") and path.endswith("/card"):
+            entry = self.entries.get(path[len("/agents/"):-len("/card")])
+            if entry is None:
+                return 404, {"error": "Agent not found"}
+            return 200, entry["agent_card"]
+        return 404, {"error": "not found"}
+
 
 class FakeSender:
     """Records sends. failures = number of SendError raises before success."""

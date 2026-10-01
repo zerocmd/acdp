@@ -7,11 +7,12 @@ import re
 from pathlib import Path
 from typing import List, Literal
 
-from fastapi import WebSocket, WebSocketDisconnect
+from fastapi import HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from arena.acdp import AcdpError
 from arena.bus import load_log, replay
 from arena.cast import AgentSpec
 from arena.host import Arena, InjectionError
@@ -106,6 +107,36 @@ def register_routes(arena: Arena, ui_dir: Path, runs_dir: Path) -> None:
         except (ValueError, InjectionError) as e:
             return JSONResponse({"error": str(e)}, status_code=400)
         return {"id": agent.agent_id, "slug": spec.slug}
+
+    @app.get("/arena/agents")
+    async def list_agents() -> dict:
+        return {"agents": [a.summary() for a in arena.agents.values()]}
+
+    @app.get("/arena/agents/{slug}")
+    async def agent_detail(slug: str) -> dict:
+        agent = arena.agents.get(slug)
+        if agent is None:
+            raise HTTPException(status_code=404, detail="unknown agent")
+        return agent.detail()
+
+    async def proxy(path: str):
+        try:
+            status, body = await arena.ctx.acdp.registry_get(path)
+        except AcdpError as e:
+            return JSONResponse({"error": str(e)}, status_code=502)
+        return JSONResponse(body, status_code=status)
+
+    @app.get("/arena/registry")
+    async def registry_agents():
+        return await proxy("/agents")
+
+    @app.get("/arena/registry/orgs")
+    async def registry_orgs():
+        return await proxy("/orgs")
+
+    @app.get("/arena/registry/agents/{agent_id}/card")
+    async def registry_card(agent_id: str):
+        return await proxy(f"/agents/{agent_id}/card")
 
     @app.post("/arena/pause")
     async def pause() -> dict:

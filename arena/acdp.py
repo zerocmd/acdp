@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import httpx
 import requests
@@ -46,6 +46,7 @@ class AcdpClient:
         sleep: Callable[[float], Any] = asyncio.sleep,
         register_attempts: int = 4,
         retry_delay: float = 10.0,
+        registry_url: str = "",
     ) -> None:
         self.dns_api_url = dns_api_url.rstrip("/")
         self.registry = registry
@@ -54,6 +55,7 @@ class AcdpClient:
         self.sleep = sleep
         self.register_attempts = register_attempts
         self.retry_delay = retry_delay
+        self.registry_url = registry_url.rstrip("/")
 
     async def _post_dns(self, path: str, body: Dict[str, Any]) -> Dict[str, Any]:
         """POST to the DNS API. Retries connection errors; a refusal fails at once."""
@@ -75,6 +77,23 @@ class AcdpClient:
         if response.status_code != 200:
             raise AcdpError(result.get("message") or f"DNS API returned {response.status_code}")
         return result
+
+    async def registry_get(self, path: str) -> Tuple[int, Any]:
+        """GET a registry path. Returns (status, json body).
+
+        Raises:
+            AcdpError: The registry cannot be reached.
+        """
+        async with self.http_factory() as http:
+            try:
+                response = await http.get(f"{self.registry_url}{path}")
+            except httpx.HTTPError as e:
+                raise AcdpError(f"registry unreachable: {e}") from e
+        try:
+            body = response.json()
+        except ValueError:
+            body = {"error": response.text[:200]}
+        return response.status_code, body
 
     async def create_zone(self, zone: str) -> str:
         """Create the zone if it does not exist. Returns "created" or "exists"."""

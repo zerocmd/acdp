@@ -10,6 +10,11 @@ from fastapi.testclient import TestClient
 from arena.api import register_routes, slugify
 
 
+def asyncio_run_setup(arena, client):
+    """Run arena.setup() on the TestClient's event loop."""
+    client.portal.call(arena.setup)
+
+
 @pytest.fixture
 def setup(tmp_path):
     ui = tmp_path / "ui"
@@ -113,3 +118,45 @@ def test_new_replay_replaces_a_running_replay(setup):
     time.sleep(1.5)
     types = [e["type"] for e in arena.bus.history]
     assert types == ["bus.reset", "fast.event"]
+
+
+def test_agent_list_and_detail(setup):
+    arena, client, _ = setup
+    asyncio_run_setup(arena, client)
+    listed = client.get("/arena/agents").json()["agents"]
+    assert [a["slug"] for a in listed] == ["northgate-soc"]
+    assert set(listed[0]) >= {"id", "slug", "name", "organization", "domain", "capability",
+                              "needs", "model", "role", "state", "counters", "verification"}
+    detail = client.get("/arena/agents/northgate-soc").json()
+    assert set(detail) >= {"system_prompt", "last_prompt", "last_decision", "decisions",
+                           "threads", "inbox", "trust", "queries", "dns"}
+    assert detail["dns"]["srv"] == "arena:8080"
+    assert detail["threads"][0]["id"] == "t1"
+    assert detail["inbox"] == [{"sender": "system", "intent": "seed", "trust": None,
+                                "thread_id": "t1"}]
+    assert client.get("/arena/agents/nobody").status_code == 404
+
+
+def test_registry_proxies(setup):
+    arena, client, _ = setup
+    asyncio_run_setup(arena, client)
+    entries = client.get("/arena/registry").json()["agents"]
+    assert entries[0]["verification"]["status"] == "verified"
+    card = client.get("/arena/registry/agents/northgate-soc.northgate.example/card")
+    assert card.json()["name"] == "SOC Investigator"
+    assert client.get("/arena/registry/agents/nobody.example/card").status_code == 404
+    assert client.get("/arena/registry/orgs").json()["orgs"][0]["organization"] == \
+        "Northgate Bank"
+
+
+def test_registry_proxy_returns_502_when_unreachable(setup):
+    arena, client, _ = setup
+
+    async def down(path):
+        from arena.acdp import AcdpError
+        raise AcdpError("registry unreachable: connection refused")
+
+    arena.ctx.acdp.registry_get = down
+    response = client.get("/arena/registry")
+    assert response.status_code == 502
+    assert "registry unreachable" in response.json()["error"]

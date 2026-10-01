@@ -155,3 +155,25 @@ def test_dns_api_connection_errors_are_retried_but_400_is_not():
     with pytest.raises(AcdpError, match="bad zone"):
         asyncio.run(refused.create_zone("evil.com"))
     assert len(seen) == 1
+
+
+def test_registry_get_returns_status_and_body_or_raises():
+    def handler(request):
+        if request.url.path == "/agents":
+            return httpx.Response(200, json={"agents": []})
+        return httpx.Response(404, json={"error": "Agent not found"})
+
+    acdp = AcdpClient("http://bind:8053", FakeRegistry(), FakeResolver(),
+                      lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+                      sleep=no_sleep, registry_url="http://registry:5000")
+    assert asyncio.run(acdp.registry_get("/agents")) == (200, {"agents": []})
+    assert asyncio.run(acdp.registry_get("/agents/x/card"))[0] == 404
+
+    def down(request):
+        raise httpx.ConnectError("down", request=request)
+
+    broken = AcdpClient("http://bind:8053", FakeRegistry(), FakeResolver(),
+                        lambda: httpx.AsyncClient(transport=httpx.MockTransport(down)),
+                        sleep=no_sleep, registry_url="http://registry:5000")
+    with pytest.raises(AcdpError, match="registry unreachable"):
+        asyncio.run(broken.registry_get("/agents"))

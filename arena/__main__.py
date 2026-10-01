@@ -62,6 +62,7 @@ def create_arena(
         RegistryClient(env.get("REGISTRY_URL", "http://registry:5000")),
         DNSResolver(env.get("DNS_SERVER", "bind"), int(env.get("DNS_PORT", "53"))),
         http_factory,
+        registry_url=env.get("REGISTRY_URL", "http://registry:5000"),
     )
     arena = Arena(
         load_cast(cast_path),
