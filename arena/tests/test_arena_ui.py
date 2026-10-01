@@ -1,5 +1,6 @@
-"""UI files: served by the app, and app.js handles every event type the runtime emits."""
+"""UI files: served by the app, and the store handles every event type the runtime emits."""
 
+import re
 from pathlib import Path
 
 from conftest import SOC, make_arena, make_cast
@@ -8,12 +9,6 @@ from fastapi.testclient import TestClient
 from arena.api import register_routes
 
 UI = Path(__file__).resolve().parents[1] / "ui"
-EVENT_TYPES = [
-    "bus.reset", "arena.started", "arena.idle", "arena.paused", "arena.resumed",
-    "arena.stopped", "agent.registered", "agent.verified", "agent.verification_failed",
-    "agent.error", "discovery.query", "thread.opened", "thread.closed", "message.sent",
-    "message.failed", "verification.peer_check", "decision.rejected",
-]
 
 
 def test_ui_files_are_served(tmp_path):
@@ -27,7 +22,20 @@ def test_ui_files_are_served(tmp_path):
         assert client.get(f"/ui/{name}").status_code == 200, name
 
 
-def test_app_handles_every_event_type():
-    source = (UI / "app.js").read_text()
-    missing = [t for t in EVENT_TYPES if f'"{t}"' not in source]
-    assert missing == []
+ARENA = Path(__file__).resolve().parents[1]
+
+
+def emitted_event_types():
+    """Every event type the runtime publishes, read from the source."""
+    found = set()
+    for path in ARENA.glob("*.py"):
+        found.update(re.findall(r'publish\(\s*"([a-z_]+\.[a-z_]+)"', path.read_text()))
+    return found
+
+
+def test_store_handles_every_emitted_event_type():
+    source = (UI / "store.js").read_text()
+    handled = set(re.findall(r'"([a-z_]+\.[a-z_]+)"', source.split("];", 1)[0]))
+    emitted = emitted_event_types()
+    assert "registration.step" in emitted and "bus.reset" in emitted
+    assert emitted - handled == set()
