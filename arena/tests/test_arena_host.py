@@ -141,3 +141,47 @@ def test_concurrent_injection_of_one_slug_admits_exactly_one():
     results = asyncio.run(run())
     assert sum(isinstance(r, InjectionError) for r in results) == 1
     assert [e["slug"] for e in events(arena, "agent.registered")].count("twin") == 1
+
+
+def steps(arena, agent_id):
+    return [e["data"] for e in arena.bus.history
+            if e["type"] == "registration.step" and e["data"]["id"] == agent_id]
+
+
+def test_registration_publishes_seven_steps_in_order():
+    arena = make_arena(make_cast(SOC, owner="northgate-soc", closer="northgate-soc"))
+    asyncio.run(arena.setup())
+    soc = steps(arena, "northgate-soc.northgate.example")
+    assert [s["step"] for s in soc] == [
+        "identity", "zone", "dns", "card", "submitted", "checks", "result"]
+    assert all(s["status"] == "ok" for s in soc[:-1])
+    by = {s["step"]: s["detail"] for s in soc}
+    agent = arena.agents["northgate-soc"]
+    assert by["identity"] == {"did": agent.identity.did,
+                              "fingerprint": agent.identity.fingerprint()}
+    assert by["zone"] == {"zone": "northgate.example", "result": "created"}
+    assert by["dns"]["srv"] == "arena:8080"
+    assert f"key={agent.identity.fingerprint()}" in by["dns"]["txt"]
+    assert by["card"]["card_url"].endswith("/agents/northgate-soc/.well-known/agent-card.json")
+    assert by["checks"]["status"] == "verified"
+    assert soc[-1] == {"id": "northgate-soc.northgate.example", "step": "result",
+                       "status": "ok", "detail": {"status": "verified", "reasons": []}}
+    assert agent.dns == by["dns"]
+    assert agent.verification == {"status": "verified", "reasons": []}
+    registered = events(arena, "agent.registered")[0]
+    assert registered["system_prompt"].startswith("You lead the investigation.")
+    assert registered["needs"] == ["threat-intel"]
+
+
+def test_no_txt_marks_dns_skipped_and_result_failed():
+    arena = make_arena(make_cast(SOC, owner="northgate-soc", closer="northgate-soc"))
+    asyncio.run(arena.setup())
+    spec = AgentSpec.from_dict(spec_dict(slug="broken", organization="Broken Co",
+                                         domain="broken.example"))
+    asyncio.run(arena.add_agent(spec, misconfigure="no_txt"))
+    b = {s["step"]: s for s in steps(arena, "broken.broken.example")}
+    assert b["dns"]["status"] == "skipped"
+    assert b["checks"]["status"] == "failed"
+    assert b["result"] == {"id": "broken.broken.example", "step": "result",
+                           "status": "failed",
+                           "detail": {"status": "failed", "reasons": ["txt record missing"]}}

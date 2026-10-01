@@ -10,6 +10,16 @@ import requests
 logger = logging.getLogger(__name__)
 
 
+def dns_txt(capability: str, description: str, card_path: str, key: str) -> List[str]:
+    """TXT strings as update_zone.sh writes them (for display; DNS is the source)."""
+    clean = "".join(ch for ch in description if ch.isprintable() and ch not in '"\\')[:200]
+    txt = ["ver=1.1", f"caps={capability}", f"desc={clean}", "proto=a2a/0.3",
+           f"a2a={card_path}"]
+    if key:
+        txt.append(f"key={key}")
+    return txt
+
+
 class AcdpError(Exception):
     """An ACDP service refused a request or could not be reached."""
 

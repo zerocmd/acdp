@@ -12,14 +12,14 @@ from fastapi import FastAPI
 from strands import Agent
 from strands.models import Model
 
-from arena.acdp import AcdpError
+from arena.acdp import AcdpError, dns_txt
 from arena.agent import ArenaAgent, ArenaContext
 from arena.bus import EventBus
 from arena.card import agent_base_url, build_card, card_path, registration_payload
 from arena.cast import SLUG_RE, AgentSpec, Cast
 from arena.identity import Identity
 from arena.inbox_executor import InboxExecutor, build_a2a_app
-from arena.prompts import generate_request
+from arena.prompts import generate_request, system_prompt
 from arena.rate import RunGuard, TokenBucket
 from arena.threads import ThreadRegistry
 from arena.transport import A2ASender
@@ -144,10 +144,15 @@ class Arena:
         finally:
             self._pending.discard(spec.slug)
 
+    def _step(self, agent_id: str, step: str, status: str, detail: Dict[str, Any]) -> None:
+        self.bus.publish("registration.step", {
+            "id": agent_id, "step": step, "status": status, "detail": detail,
+        })
+
     async def _add_agent(self, spec: AgentSpec, misconfigure: str) -> ArenaAgent:
         acdp = self.ctx.acdp
         try:
-            await acdp.create_zone(spec.domain)
+            zone_result = await acdp.create_zone(spec.domain)
         except AcdpError as e:
             raise InjectionError(str(e)) from e
 
@@ -164,40 +169,69 @@ class Arena:
             f"/agents/{spec.slug}", build_a2a_app(card, InboxExecutor(agent.receive))
         )
         self.agents[spec.slug] = agent
+        agent_id = identity.agent_id
         self.bus.publish("agent.registered", {
-            "id": identity.agent_id, "slug": spec.slug, "name": spec.name,
+            "id": agent_id, "slug": spec.slug, "name": spec.name,
             "organization": spec.organization, "domain": spec.domain,
             "capability": spec.capability, "model": spec.model, "role": spec.role,
-            "did": identity.did,
+            "did": identity.did, "needs": list(spec.needs),
+            "cadence": list(spec.cadence), "system_prompt": system_prompt(spec),
         })
+        self._step(agent_id, "identity", "ok",
+                   {"did": identity.did, "fingerprint": identity.fingerprint()})
+        self._step(agent_id, "zone", "ok", {"zone": spec.domain, "result": zone_result})
 
+        failed_step = "dns"
         try:
-            if misconfigure != "no_txt":
+            if misconfigure == "no_txt":
+                agent.dns = {"skipped": True}
+                self._step(agent_id, "dns", "skipped", agent.dns)
+            else:
                 key = identity.fingerprint()
                 if misconfigure == "wrong_key":
                     key = Identity(spec.slug, spec.domain).fingerprint()
+                path = card_path(spec.slug)
                 await acdp.publish_dns(
-                    agent_id=identity.agent_id, host=self.settings.host,
+                    agent_id=agent_id, host=self.settings.host,
                     port=self.settings.port, capability=spec.capability,
-                    description=spec.description, card_path=card_path(spec.slug), key=key,
+                    description=spec.description, card_path=path, key=key,
                 )
+                agent.dns = {
+                    "srv": f"{self.settings.host}:{self.settings.port}",
+                    "txt": dns_txt(spec.capability, spec.description, path, key),
+                }
+                self._step(agent_id, "dns", "ok", agent.dns)
+            self._step(agent_id, "card", "ok", {"card_url": agent.card_url})
+            failed_step = "submitted"
             entry = await acdp.register(
                 registration_payload(spec, identity, self.settings.base_url, card)
             )
+            self._step(agent_id, "submitted", "ok", {})
         except AcdpError as e:
+            self._step(agent_id, failed_step, "failed", {"error": str(e)})
+            agent.verification = {"status": "failed", "reasons": [str(e)]}
+            self._step(agent_id, "result", "failed", dict(agent.verification))
             self.bus.publish(
-                "agent.verification_failed", {"id": identity.agent_id, "reasons": [str(e)]}
+                "agent.verification_failed", {"id": agent_id, "reasons": [str(e)]}
             )
             return agent
 
         verification = entry.get("verification") or {}
-        if verification.get("status") == "verified":
+        verified = verification.get("status") == "verified"
+        self._step(agent_id, "checks", "ok" if verified else "failed", verification)
+        agent.verification = {
+            "status": "verified" if verified else "failed",
+            "reasons": list(verification.get("reasons") or []),
+        }
+        self._step(agent_id, "result", "ok" if verified else "failed",
+                   dict(agent.verification))
+        if verified:
             self.bus.publish(
-                "agent.verified", {"id": identity.agent_id, "verification": verification}
+                "agent.verified", {"id": agent_id, "verification": verification}
             )
         else:
             self.bus.publish("agent.verification_failed", {
-                "id": identity.agent_id, "reasons": list(verification.get("reasons") or []),
+                "id": agent_id, "reasons": agent.verification["reasons"],
             })
         if self.live:
             self._launch(agent)
@@ -213,7 +247,8 @@ class Arena:
         seed = self.cast.seed
         owner = self.agents[seed.owner]
         thread = self.ctx.threads.open(
-            owner.agent_id, seed.title, closer=self.agents[seed.closer].agent_id
+            owner.agent_id, seed.title, closer=self.agents[seed.closer].agent_id,
+            cap=owner.spec.thread_cap,
         )
         self.bus.publish("thread.opened", {
             "id": thread.id, "owner": thread.owner, "title": thread.title,

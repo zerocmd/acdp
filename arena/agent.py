@@ -96,6 +96,8 @@ class ArenaAgent:
         self.counters = {"sent": 0, "received": 0, "rejected": 0, "errors": 0}
         self.queries: Deque[Dict[str, Any]] = deque(maxlen=20)
         self.seen: Dict[str, Set[str]] = {}
+        self.dns: Dict[str, Any] = {}
+        self.verification: Dict[str, Any] = {"status": "pending", "reasons": []}
 
     @property
     def agent_id(self) -> str:
