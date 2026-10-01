@@ -87,6 +87,8 @@ class ArenaAgent:
         self.ctx = ctx
         self.inbox: asyncio.Queue = asyncio.Queue()
         self.trust: Dict[str, Trust] = {}
+        # Senders seen in the inbox stay reachable for replies on later ticks.
+        self.known: Dict[str, Target] = {}
 
     @property
     def agent_id(self) -> str:
@@ -102,7 +104,11 @@ class ArenaAgent:
             trust = Trust("failed", "wrong recipient")
         else:
             trust = await self.ctx.verifier.check(message)
-        self.trust[message.from_id] = trust
+        previous = self.trust.get(message.from_id)
+        # A failed check never replaces a verified result: from_id is unproven
+        # when the check fails, so a forger must not taint a real peer.
+        if trust.status == "verified" or previous is None or previous.status != "verified":
+            self.trust[message.from_id] = trust
         self.ctx.bus.publish("verification.peer_check", {
             "agent": self.agent_id,
             "sender": message.from_id,
@@ -118,6 +124,11 @@ class ArenaAgent:
         while not self.inbox.empty():
             items.append(self.inbox.get_nowait())
         return items
+
+    def _requeue(self, items: List[InboxItem]) -> None:
+        """Return unused items so the next tick sees them again."""
+        for item in items:
+            self.inbox.put_nowait(item)
 
     async def _discover(
         self, items: List[InboxItem]
@@ -137,10 +148,12 @@ class ArenaAgent:
                 "agent": self.agent_id, "capability": capability, "results": found,
             })
         for item in items:
-            if item.message is not None and item.message.from_id not in targets:
-                targets[item.message.from_id] = Target(
+            if item.message is not None:
+                self.known.setdefault(item.message.from_id, Target(
                     _base_from_card_url(item.message.card_url), item.message.from_did
-                )
+                ))
+        for agent_id, target in self.known.items():
+            targets.setdefault(agent_id, target)
         return peers, targets
 
     def _reject(self, reason: str) -> None:
@@ -198,16 +211,26 @@ class ArenaAgent:
             self._reject("arena rate limit")
             return None
         items = self._drain()
-        peers, targets = await self._discover(items)
-        threads = self.ctx.threads.for_agent(self.agent_id)
-        prompt = turn_prompt(
-            items, threads, self.ctx.threads.open_threads(), peers, self.trust
-        )
-        decision = await self._decide(prompt)
-        if decision is None or decision.action == "wait":
+        try:
+            peers, targets = await self._discover(items)
+            threads = self.ctx.threads.for_agent(self.agent_id)
+            prompt = turn_prompt(
+                items, threads, self.ctx.threads.open_threads(), peers, self.trust
+            )
+            decision = await self._decide(prompt)
+        except BaseException:
+            # Errors, timeouts, and cancellation must not lose the inbox.
+            self._requeue(items)
+            raise
+        if decision is None:
+            self._requeue(items)
+            return None
+        if decision.action == "wait":
             return None
         if not self.ctx.running.is_set():
+            # Pause drops the decision, not the inbox.
             self._reject("paused")
+            self._requeue(items)
             return None
         reason = self._check(decision, targets)
         if reason:

@@ -178,3 +178,66 @@ def test_run_reports_errors_and_keeps_going():
     assert [e["type"] for e in ctx.bus.history].count("agent.error") == 2
     assert len(calls) == 2
     assert sleeps == [1.0, 6.0, 11.0]
+
+
+def inbound(sender, to, msg_id="x9"):
+    return ArenaMessage(
+        id=msg_id, thread_id="t1", from_id=sender, to_id=to,
+        from_did="did:web:x", to_did="did:web:y", ts=1.0, intent=Intent.SHARE,
+        body="b", card_url=f"http://arena:8080/agents/{sender.split('.')[0]}"
+                          "/.well-known/agent-card.json",
+    )
+
+
+def test_inbox_items_survive_a_failed_discovery():
+    agent, ctx, _, _ = make_agent(lambda p: send())
+
+    async def broken_find(capability):
+        raise RuntimeError("registry down")
+
+    ctx.acdp.find = broken_find
+    agent.seed("t1", "Brief.")
+    try:
+        asyncio.run(agent.tick())
+    except RuntimeError:
+        pass
+    assert agent.inbox.qsize() == 1
+
+
+def test_inbox_items_survive_invalid_output_and_pause():
+    replies = iter([{"action": "maybe"}])
+    agent, ctx, _, _ = make_agent(lambda p: next(replies, "no tool"))
+    agent.seed("t1", "Brief.")
+    asyncio.run(agent.tick())
+    assert agent.inbox.qsize() == 1
+
+    def pause_then_send(prompt):
+        ctx.running.clear()
+        return send()
+
+    agent, ctx, _, _ = make_agent(pause_then_send)
+    agent.seed("t1", "Brief.")
+    asyncio.run(agent.tick())
+    assert agent.inbox.qsize() == 1
+
+
+def test_known_sender_stays_reachable_on_later_ticks():
+    impostor = "lookalike-intel.halcyon-inte1.example"
+    decisions = iter([{"action": "wait"},
+                      send(to=impostor, thread_id="t1", intent="decline", body="No.")])
+    ctx = make_ctx(acdp=FakeAcdp(), verifier=FixedVerifier(Trust("failed", "domain mismatch")))
+    agent, ctx, _, _ = make_agent(lambda p: next(decisions), ctx=ctx)
+    ctx.threads.open(agent.agent_id, "case")
+    asyncio.run(agent.receive(inbound(impostor, agent.agent_id)))
+    asyncio.run(agent.tick())   # model waits; the message is consumed
+    sent = asyncio.run(agent.tick())
+    assert sent is not None and sent.to_id == impostor
+
+
+def test_failed_check_does_not_overwrite_a_verified_peer():
+    agent, ctx, _, _ = make_agent(lambda p: {"action": "wait"})
+    ctx.verifier = FixedVerifier()
+    asyncio.run(agent.receive(inbound(PEER_ID, agent.agent_id, "a1")))
+    ctx.verifier = FixedVerifier(Trust("failed", "sender mismatch"))
+    asyncio.run(agent.receive(inbound(PEER_ID, agent.agent_id, "a2")))
+    assert agent.trust[PEER_ID] == Trust("verified")
