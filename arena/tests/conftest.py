@@ -152,6 +152,12 @@ class FakeSender:
         self.sent.append((base_url, message))
         return SendResult(f"ack {message.id} verified", None)
 
+    async def get_task(self, base_url, task_id):
+        return "working", "", ""
+
+    async def cancel_task(self, base_url, task_id):
+        return "canceled"
+
 
 class FixedVerifier:
     def __init__(self, trust=VERIFIED):

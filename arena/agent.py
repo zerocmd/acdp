@@ -23,6 +23,7 @@ from arena.identity import Identity
 from arena.inbox import InboxItem
 from arena.prompts import system_prompt, turn_prompt
 from arena.rate import RunGuard, TokenBucket
+from arena.tasks import FINAL, finish_task
 from arena.threads import NEW_THREAD, ThreadRegistry
 from arena.transport import SendError
 from arena.verify import Trust
@@ -99,6 +100,8 @@ class ArenaAgent:
         self.dns: Dict[str, Any] = {}
         self.verification: Dict[str, Any] = {"status": "pending", "reasons": []}
         self.task_store = None
+        self.open_requests: Dict[str, Dict[str, str]] = {}
+        self.received_tasks: Dict[Tuple[str, str], List[str]] = {}
 
     @property
     def agent_id(self) -> str:
@@ -193,7 +196,48 @@ class ArenaAgent:
         })
         self.counters["received"] += 1
         self.inbox.put_nowait(InboxItem(message=message, trust=trust))
+        if task_id:
+            self.received_tasks.setdefault((message.from_id, message.thread_id), []).append(task_id)
+            self.ctx.bus.publish("task.created", {
+                "task_id": task_id, "requester": message.from_id, "recipient": self.agent_id,
+                "message_id": message.id, "thread_id": message.thread_id,
+            })
         return trust
+
+    async def _finish_received(self, message: ArenaMessage) -> None:
+        """Link rule: an answer finishes the oldest open request from that agent."""
+        if message.intent.value not in ("reply", "share", "decline", "challenge"):
+            return
+        queue = self.received_tasks.get((message.to_id, message.thread_id)) or []
+        if not queue or self.task_store is None:
+            return
+        task_id = queue.pop(0)
+        state = "completed" if message.intent.value in ("reply", "share") else "rejected"
+        await finish_task(self.task_store, task_id, state, message.body, message.id)
+
+    def _observed(self, task_id: str, state: str, text: str, reply_id: str) -> None:
+        self.open_requests.pop(task_id, None)
+        self.ctx.bus.publish("task.updated", {
+            "task_id": task_id, "state": state,
+            "artifact": text if state == "completed" else "",
+            "reason": "" if state == "completed" else text, "reply_id": reply_id,
+        })
+
+    async def poll_tasks(self) -> None:
+        """Read up to 5 open requests over A2A; cancel those on closed threads."""
+        for request in list(self.open_requests.values())[:5]:
+            thread = self.ctx.threads.get(request["thread_id"])
+            try:
+                state, text, reply_id = await self.ctx.sender.get_task(
+                    request["base_url"], request["task_id"])
+                if state in FINAL:
+                    self._observed(request["task_id"], state, text, reply_id)
+                elif thread is not None and thread.closed:
+                    state = await self.ctx.sender.cancel_task(
+                        request["base_url"], request["task_id"])
+                    self._observed(request["task_id"], state, "thread closed", "")
+            except SendError as e:
+                logger.warning(f"{self.agent_id}: task poll failed: {e}")
 
     def _drain(self) -> List[InboxItem]:
         items = []
@@ -281,7 +325,13 @@ class ArenaAgent:
         """Send with one retry. Returns None on success, else the error text."""
         for attempt in range(2):
             try:
-                await self.ctx.sender.send(target.base_url, message)
+                result = await self.ctx.sender.send(target.base_url, message)
+                if result.task_id:
+                    self.open_requests[result.task_id] = {
+                        "task_id": result.task_id, "recipient": message.to_id,
+                        "thread_id": message.thread_id, "message_id": message.id,
+                        "base_url": target.base_url,
+                    }
                 return None
             except SendError as e:
                 if attempt == 0:
@@ -296,6 +346,7 @@ class ArenaAgent:
 
     async def tick(self) -> Optional[ArenaMessage]:
         """Run one decision cycle. Returns the sent message, or None."""
+        await self.poll_tasks()
         if not self.ctx.bucket.available():
             # Skip the paid model call. The inbox waits for the next tick.
             self._reject("arena rate limit")
@@ -360,6 +411,7 @@ class ArenaAgent:
             return None
 
         closed = self.ctx.threads.append(message)
+        await self._finish_received(message)
         data = {k: v for k, v in message.payload().items() if k != "sig"}
         data["color"] = self.ctx.threads.get(thread_id).color
         data["looking_for"] = decision.looking_for
