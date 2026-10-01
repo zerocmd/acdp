@@ -125,7 +125,7 @@ git commit -m "feat(registry): list organization anchors at GET /orgs"
 - Test: `arena/tests/test_arena_agent.py`, `arena/tests/test_arena_conversation.py`
 
 **Interfaces:**
-- Produces: `TurnDecision.looking_for: str`, `TurnDecision.why_this_peer: str`.
+- Produces: `TurnDecision.looking_for: str` and `TurnDecision.why_this_peer: str`. Both are display-only, so values longer than 200 characters are truncated to 200, not rejected. A rejection would discard an otherwise valid decision after paid retries.
 - Produces the event `decision.made {agent, prompt, decision, outcome}`. `decision` is `TurnDecision.model_dump(mode="json")`, or `None` for invalid output. `outcome` is one of `"sent"`, `"wait"`, `"failed: <error>"`, or `"rejected: <reason>"`.
 - Produces: `message.sent` data gains `looking_for` and `why_this_peer`.
 - Produces on `ArenaAgent`:
@@ -143,8 +143,8 @@ def test_turn_decision_intent_fields():
     d = TurnDecision(action="send", looking_for="attribution", why_this_peer="only verified")
     assert (d.looking_for, d.why_this_peer) == ("attribution", "only verified")
     assert TurnDecision(action="wait").looking_for == ""
-    with pytest.raises(ValidationError):
-        TurnDecision(action="send", looking_for="x" * 201)
+    long = TurnDecision(action="send", looking_for="x" * 250, why_this_peer="y" * 201)
+    assert (len(long.looking_for), len(long.why_this_peer)) == (200, 200)
 ```
 
 Append to `arena/tests/test_arena_agent.py`:
@@ -204,15 +204,21 @@ Note: each `make_agent` call builds a new agent and context, so the final agent 
 - [ ] **Step 2: Run to verify failure**
 
 Run: `pytest arena/tests/test_arena_conversation.py arena/tests/test_arena_agent.py -k "intent or recorded or outcome" -v`
-Expected: FAIL. `TurnDecision` rejects the unknown fields, and `decision.made` is never published.
+Expected: FAIL. `TurnDecision` has no `looking_for` field (the constructor ignores the unknown keyword, so the length assertion fails), and `decision.made` is never published.
 
 - [ ] **Step 3: Implement**
 
-`arena/decision.py`: add two fields after `body`:
+`arena/decision.py`: add two fields after `body`, and a validator that truncates them. Add `field_validator` to the pydantic import.
 
 ```python
     looking_for: str = Field(default="", max_length=200)
     why_this_peer: str = Field(default="", max_length=200)
+
+    @field_validator("looking_for", "why_this_peer", mode="before")
+    @classmethod
+    def _truncate(cls, value: object) -> object:
+        """Display-only fields: cut long text instead of rejecting the decision."""
+        return value[:200] if isinstance(value, str) else value
 ```
 
 `arena/prompts.py`: add one line to `RULES`, before the line `- Keep "body" under 120 words.`:
@@ -333,9 +339,11 @@ Keep the existing lines before `decision = await self._decide(prompt)` unchanged
 - [ ] **Step 4: Run tests**
 
 Run: `pytest arena/tests -v`
-Expected: PASS. If an existing test checks `ctx.bus.history[-1]` after a rejection, it now sees `decision.made` last, so that test fails. Change it to look up the last `decision.rejected` event:
-`[e for e in ctx.bus.history if e["type"] == "decision.rejected"][-1]["data"]`.
-Record this as a test adaptation in the ledger. The behavior is unchanged; only the event order grew.
+Expected: PASS. Existing tests that read `ctx.bus.history[-1]` now see `decision.made` last, so they fail. Change each one to look up the last event of the type it means:
+- After a rejection: `[e for e in ctx.bus.history if e["type"] == "decision.rejected"][-1]["data"]`. This affects `test_tick_rejects_self_and_unknown_targets`, `test_unknown_thread_and_rate_limit_are_rejected`, `test_invalid_model_output_is_rejected`, and `test_decision_made_while_paused_is_dropped`.
+- After a failed send: `[e for e in ctx.bus.history if e["type"] == "message.failed"]` is non-empty. This affects `test_send_failure_retries_once_then_reports`.
+
+Record this as one test adaptation in the ledger. The behavior is unchanged; only the event order grew.
 
 - [ ] **Step 5: Commit**
 
@@ -1020,6 +1028,7 @@ test("chat items follow the thread, all-threads, agent, and range filters", () =
 test("decisions, tasks, and unknown events", () => {
   const s = run([
     agent("a.x.example"),
+    ev("decision.made", { agent: "a.x.example", prompt: "Q", decision: { action: "send" }, outcome: "rejected: unknown target" }),
     ev("decision.made", { agent: "a.x.example", prompt: "P", decision: { action: "wait" }, outcome: "wait" }),
     ev("task.created", { task_id: "k1", requester: "a", recipient: "b", message_id: "m1", thread_id: "t1" }),
     ev("task.updated", { task_id: "k1", state: "completed", artifact: "done" }),
@@ -1027,7 +1036,8 @@ test("decisions, tasks, and unknown events", () => {
   ]);
   const a = s.agents["a.x.example"];
   assert.equal(a.lastPrompt, "P");
-  assert.equal(a.decisions.length, 1);
+  assert.equal(a.decisions.length, 2);
+  assert.equal(a.counters.rejected, 1);
   assert.equal(s.tasks.k1.state, "completed");
   assert.equal(s.taskByMessage.m1, "k1");
   assert.equal(s.unknown, 1);
@@ -1277,6 +1287,7 @@ export function apply(state, event) {
     case "decision.made": {
       const a = ensureAgent(state, d.agent);
       keepLast(a.decisions, { ...d, seq, ts });
+      if ((d.outcome || "").startsWith("rejected")) a.counters.rejected += 1;
       a.lastPrompt = d.prompt || "";
       a.lastDecision = d.decision || null;
       break;
@@ -1964,13 +1975,15 @@ export function AddAgent({ store, state }) {
   }, [state.selection.adding]);
   const submit = async (event) => {
     event.preventDefault();
-    const data = Object.fromEntries(new FormData(event.currentTarget));
+    // currentTarget is null after the first await, so keep the form now.
+    const form = event.currentTarget;
+    const data = Object.fromEntries(new FormData(form));
     const body = { ...data, generate: data.generate === "on",
       needs: (data.needs || "").split(",").map((s) => s.trim()).filter(Boolean) };
     setBusy(true);
     try {
       await postJson("/arena/agents", body);
-      event.currentTarget.reset();
+      form.reset();
       store.select({ adding: false });
     } catch (e) { setError(e.message); }
     finally { setBusy(false); }
@@ -2047,7 +2060,10 @@ export function createNetwork(el, onSelect) {
     .linkDirectionalParticleWidth(4)
     .onNodeClick((n) => onSelect(n.id))
     .cooldownTicks(120)
-    .onEngineStop(() => graph.zoomToFit(400, 60));
+    .onEngineStop(() => {
+      if (nodes.size !== fittedCount) { fittedCount = nodes.size; graph.zoomToFit(400, 60); }
+    });
+  let fittedCount = 0;
   graph.d3Force("charge").strength(-260);
   const fit = () => graph.width(el.clientWidth).height(el.clientHeight);
   const observer = new ResizeObserver(fit);
@@ -3098,7 +3114,11 @@ export function createNetwork(el, onSelect) {
     .onRenderFramePre((ctx, scale) => drawHulls(ctx, scale))
     .onNodeClick((n) => onSelect(n.id))
     .cooldownTicks(120)
-    .onEngineStop(() => graph.zoomToFit(400, 60));
+    .onEngineStop(() => {
+      // Zoom to fit only when agents join, not after every message.
+      if (nodes.size !== fittedCount) { fittedCount = nodes.size; graph.zoomToFit(400, 60); }
+    });
+  let fittedCount = 0;
   graph.d3Force("charge").strength(-260);
   const fit = () => graph.width(el.clientWidth).height(el.clientHeight);
   const observer = new ResizeObserver(fit);
@@ -3151,9 +3171,18 @@ export function createNetwork(el, onSelect) {
     if (sig !== signature) {
       signature = sig;
       const next = new Map();
-      for (const l of threadLinks(visible)) next.set(l.key, Object.assign(links.get(l.key) || {}, l));
+      for (const l of threadLinks(visible)) {
+        const existing = links.get(l.key);
+        // force-graph replaces source/target with node objects; keep those.
+        if (existing) Object.assign(existing, { count: l.count, color: l.color,
+          critical: l.critical, curvature: l.curvature });
+        next.set(l.key, existing || l);
+      }
+      // Rebuild the graph data only when the set of links changes. Count and
+      // color changes are read every frame, so they need no restart.
+      const keysChanged = next.size !== links.size || [...next.keys()].some((k) => !links.has(k));
       links = next;
-      changed = true;
+      if (keysChanged) changed = true;
     }
     const query = state.selection.allQueries ? state.lastQuery : state.highlight;
     if (query && query.seq > lastHighlightSeq && nodes.has(query.agent)) {
