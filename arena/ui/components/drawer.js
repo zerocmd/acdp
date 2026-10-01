@@ -103,6 +103,14 @@ function Activity({ agent, live, state, store }) {
     <h4>Recent decisions</h4>
     <ul>${[...agent.decisions].reverse().map((d) => html`<li><span class="chip">${d.outcome}</span>
       ${d.decision ? html` ${d.decision.action}${d.decision.to ? ` → ${d.decision.to}` : ""}${d.decision.intent ? ` (${d.decision.intent})` : ""}` : null}</li>`)}</ul>
+    <h4>Tasks</h4>
+    ${(() => {
+      const mine = Object.values(state.tasks).filter((t) => t.requester === agent.id || t.recipient === agent.id);
+      if (!mine.length) return html`<p class="muted">No A2A tasks.</p>`;
+      return html`<ul>${mine.map((t) => html`<li><span class=${`chip task ${t.state}`}>${t.state}</span>
+        ${t.requester === agent.id ? `→ ${state.agents[t.recipient]?.name || t.recipient}` : `← ${state.agents[t.requester]?.name || t.requester}`}
+        <span class="muted"> ${t.threadId}${t.reason ? ` · ${t.reason}` : ""}</span></li>`)}</ul>`;
+    })()}
   </div>`;
 }
 

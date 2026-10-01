@@ -134,3 +134,11 @@ test("pair filter shows one direction and clears on other selections", () => {
   s = select(s, { thread: "t1" });
   assert.equal(s.selection.pair, null);
 });
+
+test("task updates keep the reply id", () => {
+  const s = run([
+    ev("task.created", { task_id: "k2", requester: "a", recipient: "b", message_id: "m1", thread_id: "t1" }),
+    ev("task.updated", { task_id: "k2", state: "completed", artifact: "x", reason: "", reply_id: "m2" }),
+  ]);
+  assert.equal(s.tasks.k2.replyId, "m2");
+});

@@ -9,9 +9,22 @@ const ROW_H = 26;
 const TOP = 44;
 const LEFT = 20;
 
-// Task 18 fills this in.
 export function taskBrackets(rows, state) {
-  return [];
+  const rowOf = new Map(rows.filter((r) => r.kind === "message").map((r) => [r.id, r]));
+  const brackets = [];
+  for (const task of Object.values(state.tasks)) {
+    const start = rowOf.get(task.messageId);
+    if (!start) continue;
+    const end = task.replyId ? rowOf.get(task.replyId) : rows[rows.length - 1];
+    if (!end) continue;
+    const lanes = agentsByCompany(state).flatMap((g) => g.agents.map((a) => a.id));
+    const x = LEFT + lanes.indexOf(task.requester) * LANE_W + LANE_W / 2 - 14;
+    const y1 = TOP + start.index * ROW_H + 10;
+    const y2 = TOP + end.index * ROW_H + 10;
+    brackets.push({ path: `M${x + 8},${y1} H${x} V${y2} H${x + 8}`, state: task.state,
+      label: `task ${task.id}: ${task.state}${task.reason ? ` (${task.reason})` : ""}` });
+  }
+  return brackets;
 }
 
 export function SequenceView({ store, state }) {

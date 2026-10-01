@@ -229,12 +229,13 @@ export function apply(state, event) {
       break;
     case "task.created":
       state.tasks[d.task_id] = { id: d.task_id, requester: d.requester, recipient: d.recipient,
-        messageId: d.message_id, threadId: d.thread_id, state: "working", artifact: "", reason: "" };
+        messageId: d.message_id, threadId: d.thread_id, state: "working", artifact: "", reason: "",
+        replyId: "" };
       state.taskByMessage[d.message_id] = d.task_id;
       break;
     case "task.updated":
       if (state.tasks[d.task_id]) Object.assign(state.tasks[d.task_id], {
-        state: d.state, artifact: d.artifact || "", reason: d.reason || "" });
+        state: d.state, artifact: d.artifact || "", reason: d.reason || "", replyId: d.reply_id || "" });
       break;
     default: break;
   }
