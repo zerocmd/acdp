@@ -7,7 +7,7 @@ import time
 import uuid
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Any, Callable, Deque, Dict, List, Optional, Tuple
+from typing import Any, Callable, Deque, Dict, List, Optional, Set, Tuple
 
 from pydantic import ValidationError
 from strands import Agent
@@ -94,6 +94,8 @@ class ArenaAgent:
         self.last_decision: Optional[Dict[str, Any]] = None
         self.decisions: Deque[Dict[str, Any]] = deque(maxlen=20)
         self.counters = {"sent": 0, "received": 0, "rejected": 0, "errors": 0}
+        self.queries: Deque[Dict[str, Any]] = deque(maxlen=20)
+        self.seen: Dict[str, Set[str]] = {}
 
     @property
     def agent_id(self) -> str:
@@ -164,16 +166,28 @@ class ArenaAgent:
         peers: List[Dict[str, Any]] = []
         targets: Dict[str, Target] = {}
         for capability in self.spec.needs:
-            found = []
+            seen_before = self.seen.get(capability, set())
+            results = []
             for entry in await self.ctx.acdp.find(capability):
                 url = (entry.get("a2a") or {}).get("url")
                 if entry["id"] == self.agent_id or not url or entry["id"] in targets:
                     continue
                 targets[entry["id"]] = Target(url, entry.get("did", ""))
                 peers.append(entry)
-                found.append(entry["id"])
+                results.append({
+                    "id": entry["id"],
+                    "name": entry.get("name", ""),
+                    "organization": entry.get("organization", ""),
+                    "domain": entry.get("domain", ""),
+                    "status": (entry.get("verification") or {}).get("status", "unknown"),
+                    "new": entry["id"] not in seen_before,
+                })
+            self.seen[capability] = {r["id"] for r in results}
+            self.queries.append(
+                {"ts": time.time(), "capability": capability, "results": results}
+            )
             self.ctx.bus.publish("discovery.query", {
-                "agent": self.agent_id, "capability": capability, "results": found,
+                "agent": self.agent_id, "capability": capability, "results": results,
             })
         for item in items:
             if item.message is not None:

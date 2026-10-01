@@ -294,3 +294,29 @@ def test_failed_send_outcome_and_state():
     assert agent.state() == "paused"
     ctx.stopped.set()
     assert agent.state() == "stopped"
+
+
+def queries(ctx):
+    return [e["data"] for e in ctx.bus.history if e["type"] == "discovery.query"]
+
+
+def test_discovery_results_carry_status_and_new_flag():
+    agent, ctx, _, _ = make_agent(lambda p: {"action": "wait"})
+    asyncio.run(agent.tick())
+    first = queries(ctx)[-1]["results"]
+    assert first == [{"id": PEER_ID, "name": "Threat Intel Analyst",
+                      "organization": "Halcyon Intel", "domain": "halcyon-intel.example",
+                      "status": "verified", "new": True}]
+    asyncio.run(agent.tick())
+    assert queries(ctx)[-1]["results"][0]["new"] is False
+    assert len(agent.queries) == 2
+    assert agent.queries[-1]["capability"] == "threat-intel"
+
+
+def test_discovery_result_without_verification_is_unknown():
+    legacy = {k: v for k, v in PEER.items() if k != "verification"}
+    acdp = FakeAcdp()
+    acdp.entries[PEER_ID] = legacy
+    agent, ctx, _, _ = make_agent(lambda p: {"action": "wait"}, ctx=make_ctx(acdp=acdp))
+    asyncio.run(agent.tick())
+    assert queries(ctx)[-1]["results"][0]["status"] == "unknown"

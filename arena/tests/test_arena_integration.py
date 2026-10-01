@@ -81,8 +81,9 @@ def test_impostor_is_caught_investigation_closes_and_injection_is_discovered():
     queries = [e["data"] for e in history
                if e["type"] == "discovery.query" and e["data"]["agent"] == SOC_ID
                and e["data"]["capability"] == "threat-intel"]
-    assert NEW_ID not in queries[0]["results"]
-    assert NEW_ID in queries[-1]["results"]
+    assert NEW_ID not in [r["id"] for r in queries[0]["results"]]
+    newest = {r["id"]: r for r in queries[-1]["results"]}
+    assert newest[NEW_ID]["new"] is True
 
     closed = [e["data"] for e in history if e["type"] == "thread.closed"]
     assert closed == [{"id": "t1", "reason": "verdict"}]
