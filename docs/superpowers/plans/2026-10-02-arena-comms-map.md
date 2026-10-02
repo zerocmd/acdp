@@ -2192,7 +2192,7 @@ export function SequenceView({ store, state }) {
             onMouseEnter=${(e) => setHover({ m: r, x: e.offsetX, y: e.offsetY })} onMouseLeave=${() => setHover(null)}
             onClick=${() => store.select({ focus: r.threadId, thread: r.threadId, allThreads: false })}>
             <line class="hit" x1=${x1} x2=${x2} y1=${yy} y2=${yy} />
-            <line class=${`seq-line ${kind}${failed ? " dashed" : ""}${fresh ? " draw" : ""}`} pathLength="1"
+            <line class=${`seq-line ${kind}${failed ? " dashed" : ""}${fresh && !failed ? " draw" : ""}`} pathLength=${fresh && !failed ? 1 : null}
               x1=${x1} x2=${x2 + (x2 > x1 ? -7 : 7)} y1=${yy} y2=${yy}
               stroke-width=${kind === "verdict" ? 5 : arrowWidth(r.body)}
               style=${kind === "normal" ? `stroke:${threadColor(r.color)}` : ""} marker-end=${`url(#sq-${kind})`} />
@@ -2211,6 +2211,8 @@ export function SequenceView({ store, state }) {
 In `arena/ui/lib/layout.js`, delete `sequenceRows`. In `arena/ui/tests/layout.test.mjs`, delete `sequenceRows merges messages and markers by seq` and drop it from the import.
 
 - [ ] **Step 2: Styles** (replace the existing Sequence rules in `style.css` with these)
+
+`pathLength` is set only on lines that animate. With `pathLength="1"` the browser scales `stroke-dasharray` to that length, so a dashed (failed-trust) line would render solid.
 
 Delete the old `.sequence`, `.lane`, `.lane-name`, `.lane-org`, `.lane-axis`, `.seq-line*`, `.arrowhead*`, `.seq-label`, `.seq-msg`, and `.seq-marker*` rules, then append:
 
@@ -2240,7 +2242,6 @@ Delete the old `.sequence`, `.lane`, `.lane-name`, `.lane-org`, `.lane-axis`, `.
 .seq-line.dashed { stroke-dasharray: 6 4; }
 .seq-line.draw { stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw .4s ease-out forwards; }
 @keyframes draw { to { stroke-dashoffset: 0; } }
-.seq-line.dashed.draw { animation: none; stroke-dashoffset: 0; stroke-dasharray: 6 4; }
 .arrowhead.normal { fill: var(--muted); } .arrowhead.bad { fill: var(--bad); } .arrowhead.verdict { fill: var(--ok); }
 .seq-label { font-size: calc(11px * var(--text-scale)); text-anchor: middle; fill: var(--muted); }
 .seq-marker.discover { fill: var(--search); } .seq-marker.verify { fill: var(--ok); } .seq-marker.failed { fill: var(--bad); }
@@ -2526,7 +2527,7 @@ export function StepChips({ agent }) {
 }
 ```
 
-`new URL(d.card_url, location.href)` with a base never throws on a relative or odd URL, which fixes the deferred minor about malformed card URLs.
+`new URL(d.card_url, location.href)` resolves relative card URLs against the page, which addresses the deferred minor about card URL display. An invalid absolute URL still throws; the arena always emits valid ones.
 
 - [ ] **Step 2: Rewrite `arena/ui/components/drawer.js`**
 
@@ -3054,7 +3055,8 @@ git commit -m "docs(arena): Comms Map, expanded cast, sequence, and text size"
 
 | Spec section | Tasks |
 |---|---|
-| §1 criteria 1–4 (map, pulses, ribbons, focus) | 5, 6, 7 |
+| §1 criteria 1–3 (map, pulses, ribbons) | 5, 6, 7 |
+| §1 criterion 4 (thread focus everywhere) | 3 (`selection.focus`), 6, 9, 10, 12 |
 | §1 criterion 5 (sequence) | 3, 8, 9 |
 | §1 criterion 6 (type scale, text size) | 3, 10, 11 |
 | §1 criterion 7 (34-agent cast) | 1, 2, 4 |
