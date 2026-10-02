@@ -4,7 +4,7 @@
 // final state without replaying history.
 import { html, useEffect, useMemo, useRef, useState } from "../preact.js";
 import { threadColor } from "../palette.js";
-import { capQueue, freshEvents, placePopup, pointOnCubic, ribbonGeometry } from "../lib/commsmap.js";
+import { capQueue, freshEvents, placePopup, pointOnCubic, popupBox, ribbonGeometry } from "../lib/commsmap.js";
 import { linkKey } from "./commsmap.js";
 import { PopupCard } from "../components/popup.js";
 
@@ -13,7 +13,12 @@ const POPUP_MS = 4000;
 const SEARCH_MS = 2000;
 const BURST_MS = 800;
 const SHAKE_MS = 300;
-const POP = { w: 240, h: 70 };
+
+function textScale() {
+  try {
+    return parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--text-scale")) || 1;
+  } catch { return 1; }
+}
 
 function reducedMotion() {
   try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch { return false; }
@@ -53,7 +58,7 @@ function taskSymbol(state) {
 }
 
 export function useMapEffects(state, scene) {
-  const { layout, links, view } = scene;
+  const { layout, links, view, size } = scene;
   const since = useRef(state.lastSeq);
   const reduced = useMemo(reducedMotion, []);
   const [pulses, setPulses] = useState([]);
@@ -61,9 +66,10 @@ export function useMapEffects(state, scene) {
   const [fx, setFx] = useState([]);
 
   useEffect(() => {
-    const from = since.current;
-    if (state.lastSeq <= from) return;
+    const from = Math.max(since.current, state.animateAfter);
+    if (state.lastSeq <= since.current) return;
     since.current = state.lastSeq;
+    if (state.lastSeq <= from) return;
     const now = performance.now();
     let nextPulses = pulses;
     let nextPopups = popups.filter((p) => p.until > now);
@@ -81,9 +87,13 @@ export function useMapEffects(state, scene) {
         if (critical) nextFx = capQueue(nextFx, { id: `shake-${m.id}`, kind: "shake", target: m.to, until: now + SHAKE_MS }, 60);
         if (m.intent === "verdict") nextFx = capQueue(nextFx, { id: `burst-${m.id}`, kind: "burst", target: m.to, until: now + BURST_MS }, 60);
       }
-      const spot = placePopup(nextPopups.map((p) => ({ x: p.x, y: p.y, ...POP })), g.mid, POP,
-        { w: layout.width, h: layout.height });
-      nextPopups = capQueue(nextPopups, { id: m.id, ...spot, m, until: now + POPUP_MS }, 3);
+      // Slots are placed in screen space so they never overlap at any zoom.
+      const box = popupBox(textScale());
+      const onScreen = (p) => ({ x: p.ax * view.k + view.x + p.dx, y: p.ay * view.k + view.y + p.dy, ...box });
+      const anchor = { x: g.mid.x * view.k + view.x, y: g.mid.y * view.k + view.y };
+      const spot = placePopup(nextPopups.map(onScreen), anchor, box, size);
+      nextPopups = capQueue(nextPopups, { id: m.id, ax: g.mid.x, ay: g.mid.y, dx: spot.x - anchor.x,
+        dy: spot.y - anchor.y, m, until: now + POPUP_MS }, 3);
     }
     const query = state.selection.allQueries ? state.lastQuery : state.highlight;
     if (query && query.seq > from) {
@@ -140,7 +150,7 @@ export function useMapEffects(state, scene) {
 
   const overlay = html`<div class="popups">
     ${popups.map((p) => html`<div key=${p.id} class="popup-wrap"
-      style=${`transform: translate(${p.x * view.k + view.x}px, ${p.y * view.k + view.y}px)`}>
+      style=${`transform: translate(${p.ax * view.k + view.x + p.dx}px, ${p.ay * view.k + view.y + p.dy}px)`}>
       <${PopupCard} m=${p.m} state=${state} /></div>`)}
   </div>`;
   return { svgLayer, overlay, shaking };

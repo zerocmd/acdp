@@ -83,7 +83,7 @@ export function Chat({ store, state }) {
       <${SetupCard} state=${state} />
       ${items.map((m) => (m.kind === "system"
         ? html`<div key=${m.id} class="divider"><span>${m.text}</span></div>`
-        : html`<${Bubble} key=${m.id} m=${m} state=${state} store=${store} all=${all} fresh=${m.seq > mountSeq.current} />`))}
+        : html`<${Bubble} key=${m.id} m=${m} state=${state} store=${store} all=${all} fresh=${m.seq > Math.max(mountSeq.current, state.animateAfter)} />`))}
       ${items.length ? null : html`<p class="muted">No messages in this view yet.</p>`}
     </div>
     ${follow ? null : html`<button class="pill-btn" onClick=${() => setFollow(true)}>New messages ↓</button>`}

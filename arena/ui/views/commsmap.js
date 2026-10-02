@@ -83,7 +83,7 @@ export function CommsMapView({ store, state }) {
   const hover = state.selection.hoverMessage && state.messages.find((m) => m.id === state.selection.hoverMessage);
   const hoverKey = hover ? linkKey(hover.from, hover.to, hover.threadId) : null;
   const css = (name) => `var(${name})`;
-  const scene = { layout, links, byKey, view, focus, inFocus };
+  const scene = { layout, links, byKey, view, focus, inFocus, size };
   const effects = useMapEffects(state, scene);
 
   return html`<div class="map" ref=${box} onWheel=${onWheel} onMouseDown=${onDown}>

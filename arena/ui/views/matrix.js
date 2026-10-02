@@ -13,7 +13,7 @@ export function MatrixView({ store, state }) {
   const sel = state.selection.agent;
   const messages = chatItems({ ...state, selection: { ...state.selection, allThreads: true, agent: null, pair: null } })
     .filter((m) => !focus || m.threadId === focus);
-  const freshPairs = new Set(messages.filter((m) => m.kind === "message" && m.seq > mountSeq.current)
+  const freshPairs = new Set(messages.filter((m) => m.kind === "message" && m.seq > Math.max(mountSeq.current, state.animateAfter))
     .map((m) => `${m.from}>${m.to}`));
   const m = matrixCells(messages, ids);
   const name = (id) => state.agents[id]?.name || id;

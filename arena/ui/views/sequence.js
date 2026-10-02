@@ -99,7 +99,7 @@ export function SequenceView({ store, state }) {
           if (x1 == null || x2 == null) return null;
           const failed = r.trust && r.trust.status !== "verified";
           const kind = r.intent === "verdict" ? "verdict" : (failed || r.intent === "decline" || r.intent === "challenge") ? "bad" : "normal";
-          const fresh = r.seq > mountSeq.current;
+          const fresh = r.seq > Math.max(mountSeq.current, state.animateAfter);
           return html`<g class="seq-msg" key=${r.id}
             onMouseEnter=${(e) => setHover({ m: r, x: e.offsetX, y: e.offsetY })} onMouseLeave=${() => setHover(null)}
             onClick=${() => store.select({ focus: r.threadId, thread: r.threadId, allThreads: false })}>

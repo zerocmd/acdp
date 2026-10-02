@@ -25,14 +25,39 @@ export function groupOrgs(agents) {
   return [...orgs.values()].map((o) => ({ ...o, failed: o.agents.every((a) => a.status === "failed") }));
 }
 
+// Share the width by organization count. A band never gets less than one box width;
+// the bands at that floor drop out and the rest share what is left.
+function bandWidths(counts, avail) {
+  const widths = counts.map(() => 0);
+  let open = counts.map((_, i) => i);
+  let left = avail;
+  for (;;) {
+    const total = open.reduce((n, i) => n + Math.max(1, counts[i]), 0);
+    const low = open.filter((i) => (left * Math.max(1, counts[i])) / total < MIN_BOX_W);
+    if (!low.length) {
+      for (const i of open) widths[i] = (left * Math.max(1, counts[i])) / total;
+      return widths;
+    }
+    for (const i of low) { widths[i] = MIN_BOX_W; left -= MIN_BOX_W; }
+    open = open.filter((i) => !low.includes(i));
+    if (!open.length) return widths;
+  }
+}
+
 export function layoutMap(agents, width) {
   const orgs = groupOrgs(agents);
-  const bandW = Math.max(MIN_BOX_W, (width - PAD * 2 - GAP * 2) / 3);
-  const bands = BANDS.map((band, i) => ({ band, x: PAD + i * (bandW + GAP), w: bandW }));
+  const widths = bandWidths(BANDS.map((band) => orgs.filter((o) => o.band === band).length),
+    width - PAD * 2 - GAP * 2);
+  let left = PAD;
+  const bands = BANDS.map((band, i) => {
+    const b = { band, x: left, w: widths[i] };
+    left += widths[i] + GAP;
+    return b;
+  });
   const placed = [];
   const nodes = {};
   let height = 0;
-  for (const { band, x: bandX } of bands) {
+  for (const { band, x: bandX, w: bandW } of bands) {
     const mine = orgs.filter((o) => o.band === band);
     mine.sort((a, b) => Number(a.failed) - Number(b.failed));
     const cols = Math.max(1, Math.floor((bandW + GAP) / (MIN_BOX_W + GAP)));
@@ -50,7 +75,7 @@ export function layoutMap(agents, width) {
     }
     height = Math.max(height, y);
   }
-  return { bands, orgs: placed, nodes, width: Math.max(width, PAD * 2 + bandW * 3 + GAP * 2), height: height + PAD };
+  return { bands, orgs: placed, nodes, width: Math.max(width, left - GAP + PAD), height: height + PAD };
 }
 
 export function ribbonWidth(count) {
@@ -107,4 +132,9 @@ export function freshEvents(items, sinceSeq) {
 export function capQueue(queue, item, max) {
   const next = [...queue, item];
   return next.length > max ? next.slice(next.length - max) : next;
+}
+
+// Screen size of a popup card slot. Cards have a 2-line header and a 3-line body.
+export function popupBox(scale = 1) {
+  return { w: Math.round(250 * scale), h: Math.round(130 * scale) };
 }

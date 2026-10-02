@@ -51,6 +51,7 @@ def test_websocket_sends_history_then_live_events(setup):
     arena.bus.publish("arena.idle", {"reason": "test"})
     with client.websocket_connect("/ws") as ws:
         assert ws.receive_json()["type"] == "arena.idle"
+        assert ws.receive_json()["type"] == "ws.synced"
         client.post("/arena/pause")
         assert ws.receive_json()["type"] == "arena.paused"
 

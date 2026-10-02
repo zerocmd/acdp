@@ -202,3 +202,28 @@ test("chatItems leaves setup lines to the Setup card", () => {
   s = select(s, { allThreads: true });
   assert.deepEqual(chatItems(s).map((m) => m.sub), ["thread"]);
 });
+
+test("arena.stopped closes thinking intervals left open by cancelled calls", () => {
+  const s = run([
+    agent("c.x.example"),
+    ev("decision.started", { agent: "c.x.example" }, 30),
+    ev("arena.stopped", { reason: "time limit" }, 33),
+  ]);
+  assert.equal(s.agents["c.x.example"].thinking, null);
+  assert.deepEqual(s.agents["c.x.example"].intervals, [{ start: 30, end: 33, outcome: "stopped" }]);
+});
+
+test("history does not animate: animateAfter waits for ws.synced", () => {
+  let s = run([agent("h.x.example"), ev("arena.idle", { reason: "x" })]);
+  assert.equal(s.animateAfter, Infinity);
+  s = apply(s, { type: "ws.synced", data: {} });
+  assert.equal(s.animateAfter, s.lastSeq);
+  const reset = ev("bus.reset", { log: "demo" });
+  s = apply(s, reset);
+  assert.equal(s.animateAfter, reset.seq);
+});
+
+test("a bus.reset inside the history keeps animation off until sync", () => {
+  const s = run([ev("bus.reset", { log: "demo" }), agent("r.x.example")]);
+  assert.equal(s.animateAfter, Infinity);
+});

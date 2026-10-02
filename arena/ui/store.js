@@ -29,7 +29,7 @@ function initialSelection() {
 export function initialState() {
   return {
     mode: "connecting", runId: "", log: "", stopReason: "", paused: false, generation: 0,
-    lastSeq: -1, unknown: 0,
+    lastSeq: -1, unknown: 0, animateAfter: Infinity,
     agents: {}, order: [], threads: {}, threadOrder: [], messages: [],
     trustByMessage: {}, tasks: {}, taskByMessage: {}, timeline: [],
     highlight: null, lastQuery: null, selection: initialSelection(),
@@ -110,10 +110,16 @@ export function apply(state, event) {
     next.mode = "replay";
     next.log = d.log || "";
     next.lastSeq = seq;
-    // Views that keep their own state (Network) remount when this changes.
+    // After sync, a reset starts a new replay whose events animate as they arrive.
+    next.animateAfter = state.animateAfter === Infinity ? Infinity : seq;
+    // Views that keep their own state remount when this changes.
     next.generation = state.generation + 1;
     next.selection = { ...initialSelection(), view: state.selection.view };
     return next;
+  }
+  if (type === "ws.synced") {
+    state.animateAfter = state.lastSeq;
+    return state;
   }
   if (typeof seq === "number") {
     if (seq <= state.lastSeq) return state;
@@ -141,6 +147,7 @@ export function apply(state, event) {
     case "arena.resumed": state.paused = false; break;
     case "arena.stopped":
       state.stopReason = d.reason || "";
+      for (const a of Object.values(state.agents)) closeThinking(a, ts, "stopped");
       if (!replay) state.mode = "stopped";
       system(state, event, `Arena stopped: ${d.reason}`);
       break;

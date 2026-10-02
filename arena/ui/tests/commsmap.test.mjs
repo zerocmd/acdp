@@ -98,3 +98,31 @@ test("organization boxes leave room for the domain under the name", () => {
   const box = m.orgs[0];
   assert.ok(m.nodes["a.n.example"].y - box.y >= 40 + 22 - 0.001);
 });
+
+test("popup slots fit a three-line card and scale with text size", async () => {
+  const { popupBox } = await import("../lib/commsmap.js");
+  assert.ok(popupBox(1).h >= 120);
+  assert.ok(popupBox(1.3).h >= 160);
+  assert.ok(popupBox(1.3).w > popupBox(1).w);
+  const size = popupBox(1);
+  const active = [];
+  for (let i = 0; i < 3; i += 1) active.push({ ...placePopup(active, { x: 400, y: 300 }, size, { w: 1000, h: 700 }), ...size });
+  for (let i = 0; i < 3; i += 1) for (let j = i + 1; j < 3; j += 1) assert.ok(!overlap(active[i], active[j]));
+});
+
+test("bands share the width by organization count, so laptop widths stay readable", () => {
+  const spec = { member: [6, 4, 2, 2], provider: [2, 3, 1, 1, 2, 1, 2, 1, 1, 1, 1], assurance: [2, 1, 2] };
+  const agents = [];
+  for (const [sector, sizes] of Object.entries(spec)) {
+    sizes.forEach((n, o) => { for (let k = 0; k < n; k += 1) agents.push(ag(`a${k}.${sector}${o}.example`, sector)); });
+  }
+  const m = layoutMap(agents, 900);
+  assert.ok(m.width <= 900 + 0.001, `width ${m.width}`);
+  assert.ok(m.height < 1100, `height ${m.height}`);
+  const provider = m.bands.find((b) => b.band === "provider");
+  assert.ok(provider.w > m.bands.find((b) => b.band === "assurance").w);
+  for (const o of m.orgs) {
+    const band = m.bands.find((b) => b.band === o.band);
+    assert.ok(o.x >= band.x - 0.001 && o.x + o.w <= band.x + band.w + 0.001);
+  }
+});

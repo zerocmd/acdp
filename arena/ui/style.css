@@ -172,7 +172,7 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; }
 .node.selected .node-ring { stroke-width: 5; }
 .node-badge { font-size: calc(11px * var(--text-scale)); font-weight: 800; text-anchor: middle; fill: #fff; pointer-events: none; }
 .node-label { font-size: var(--fs-ui); fill: var(--text); paint-order: stroke; stroke: var(--bg); stroke-width: 3px; }
-.popup-card { width: 240px; border: 1px solid var(--tone); background: color-mix(in srgb, var(--tone) 8%, var(--panel));
+.popup-card { width: calc(250px * var(--text-scale)); box-sizing: border-box; border: 1px solid var(--tone); background: color-mix(in srgb, var(--tone) 8%, var(--panel));
   border-radius: 10px; padding: 6px 10px; box-shadow: 0 4px 14px rgba(0,0,0,.12); font-size: var(--fs-ui); }
 .popup-head { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
 .popup-body { font-size: var(--fs-read); line-height: 1.35; margin-top: 2px; max-height: 3.2em; overflow: hidden; }

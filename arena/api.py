@@ -76,6 +76,8 @@ def register_routes(arena: Arena, ui_dir: Path, runs_dir: Path) -> None:
         try:
             for event in list(arena.bus.history):
                 await socket.send_json(event)
+            # Tells the UI the history is complete; only later events animate.
+            await socket.send_json({"type": "ws.synced", "data": {}})
             while arena.bus.is_subscribed(queue):
                 try:
                     event = await asyncio.wait_for(queue.get(), timeout=15)
