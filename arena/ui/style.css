@@ -287,3 +287,9 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; }
 .org rect { cursor: grab; }
 .map:active .org rect { cursor: grabbing; }
 .org-label, .org-domain { pointer-events: none; }
+
+.org.inspected rect { stroke-width: 3; }
+.badge.link { cursor: pointer; }
+.chord-arc { cursor: pointer; }
+.company-name { cursor: pointer; }
+.chip-info { margin-left: 4px; opacity: .6; } .chip-info:hover { opacity: 1; }

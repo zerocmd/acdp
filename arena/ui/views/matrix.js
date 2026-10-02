@@ -2,6 +2,7 @@
 import { html, useRef } from "../preact.js";
 import { agentsByCompany, chatItems } from "../store.js";
 import { matrixCells } from "../lib/layout.js";
+import { inScope, normScope, pairScope } from "../lib/inspect.js";
 
 const CELL = 40;
 const HEAD = 200;
@@ -9,10 +10,10 @@ const HEAD = 200;
 export function MatrixView({ store, state }) {
   const ids = agentsByCompany(state).flatMap((g) => g.agents.map((a) => a.id));
   const mountSeq = useRef(state.lastSeq);
-  const focus = state.selection.focus;
+  const focus = normScope(state.selection.focus);
   const sel = state.selection.agent;
   const messages = chatItems({ ...state, selection: { ...state.selection, allThreads: true, agent: null, pair: null } })
-    .filter((m) => !focus || m.threadId === focus);
+    .filter((m) => !focus || inScope(focus, m, state.agents));
   const freshPairs = new Set(messages.filter((m) => m.kind === "message" && m.seq > Math.max(mountSeq.current, state.animateAfter))
     .map((m) => `${m.from}>${m.to}`));
   const m = matrixCells(messages, ids);
@@ -32,7 +33,7 @@ export function MatrixView({ store, state }) {
         const cls = cell ? (cell.failed ? "failed" : cell.verified ? "verified" : "") : "";
         return html`<rect x=${HEAD + c * CELL} y=${HEAD + r * CELL} width=${CELL - 2} height=${CELL - 2}
           class=${`m-cell ${cls}${from === to ? " self" : ""}${freshPairs.has(`${from}>${to}`) ? " flash" : ""}${sel && (from === sel || to === sel) ? " selrow" : ""}`} fill-opacity=${alpha}
-          onClick=${() => cell && store.select({ pair: [from, to], agent: null, allThreads: true })}>
+          onClick=${() => cell && store.select({ inspect: pairScope(from, to, "agent") })}>
           <title>${cell ? `${name(from)} → ${name(to)}: ${cell.count}\n${cell.bodies.join("\n")}` : `${name(from)} → ${name(to)}: none`}</title>
         </rect>`;
       }))}

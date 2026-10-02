@@ -6,6 +6,7 @@ import { companyColor, threadColor, TRUST_TOKENS } from "../palette.js";
 import { threadLinks } from "../lib/layout.js";
 import { applyOffsets, BAND_LABELS, layoutMap, ribbonGeometry, ribbonWidth } from "../lib/commsmap.js";
 import { useMapEffects } from "./mapfx.js";
+import { inScope, normScope, pairScope, scopeAgents, scopeLabel } from "../lib/inspect.js";
 
 export const linkKey = (a, b, thread) => `${[a, b].sort().join("|")}|${thread}`;
 const nodeRadius = (n) => Math.min(20, 14 + 2 * Math.log2(1 + n));
@@ -54,7 +55,11 @@ export function CommsMapView({ store, state }) {
       }
       setView((v) => ({ ...v, x: d.vx + e.clientX - d.x, y: d.vy + e.clientY - d.y }));
     };
-    const up = () => { drag.current = null; };
+    const up = () => {
+      const d = drag.current;
+      drag.current = null;
+      if (d && d.kind === "org" && !d.moved) store.select({ inspect: { kind: "org", domain: d.domain } });
+    };
     window.addEventListener("mousemove", move);
     window.addEventListener("mouseup", up);
     return () => { window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", up); };
@@ -94,12 +99,12 @@ export function CommsMapView({ store, state }) {
     activity[m.from] = (activity[m.from] || 0) + 1;
     activity[m.to] = (activity[m.to] || 0) + 1;
   }
-  const focus = state.selection.focus;
-  const inFocus = new Set();
-  if (focus) {
-    for (const m of messages) if (m.threadId === focus) { inFocus.add(m.from); inFocus.add(m.to); }
-    if (state.threads[focus]) inFocus.add(state.threads[focus].owner);
-  }
+  const focus = normScope(state.selection.focus);
+  const inFocus = scopeAgents(state, focus);
+  const linkIn = (scope, l) => inScope(scope, { from: l.source, to: l.target, threadId: l.thread }, state.agents);
+  const inspected = state.selection.inspect && state.selection.inspect.kind !== "agent" ? state.selection.inspect : null;
+  const openPair = (l) => store.select({ focus: l.thread, thread: l.thread, allThreads: false,
+    inspect: pairScope(l.source, l.target, "agent") });
   const hover = state.selection.hoverMessage && state.messages.find((m) => m.id === state.selection.hoverMessage);
   const hoverKey = hover ? linkKey(hover.from, hover.to, hover.threadId) : null;
   const css = (name) => `var(${name})`;
@@ -111,14 +116,14 @@ export function CommsMapView({ store, state }) {
       <button onClick=${fit}>Fit</button>
       ${Object.keys(offsets).length ? html`<button onClick=${() => setOffsets({})}>Reset layout</button>` : null}
       ${focus ? html`<button class="pill" style="--tone:var(--accent)" onClick=${() => store.select({ focus: null })}>
-        Focus: ${focus} ${state.threads[focus]?.title?.slice(0, 32) || ""} ×</button>` : null}
+        Focus: ${scopeLabel(state, focus).slice(0, 40)} ×</button>` : null}
       <label><input type="checkbox" checked=${state.selection.allQueries}
         onChange=${(e) => store.select({ allQueries: e.target.checked })} /> show every search</label>
     </div>
     <svg class="map-svg" width="100%" height="100%">
       <g transform=${`translate(${view.x},${view.y}) scale(${view.k})`}>
         ${layout.bands.map((b) => html`<text class="band-label" x=${b.x} y="34">${BAND_LABELS[b.band]}</text>`)}
-        ${layout.orgs.map((o) => html`<g class=${`org${o.failed ? " failed" : ""}`} data-domain=${o.domain}>
+        ${layout.orgs.map((o) => html`<g class=${`org${o.failed ? " failed" : ""}${inspected?.kind === "org" && inspected.domain === o.domain ? " inspected" : ""}`} data-domain=${o.domain}>
           <rect x=${o.x} y=${o.y} width=${o.w} height=${o.h} rx="10"
             style=${`--tone:${o.failed ? css("--bad") : companyColor(o.domain)}`} />
           <text class="org-label" x=${o.x + 10} y=${o.y + 18}>${o.organization}</text>
@@ -127,18 +132,19 @@ export function CommsMapView({ store, state }) {
         ${links.map((l) => {
           const g = ribbonGeometry(l, layout.nodes);
           const key = linkKey(l.source, l.target, l.thread);
-          const dim = focus && l.thread !== focus;
-          return html`<path class=${`ribbon${l.critical ? " critical" : ""}${dim ? " dim" : ""}${key === hoverKey ? " glow" : ""}`}
+          const dim = focus && !linkIn(focus, l);
+          return html`<path class=${`ribbon${l.critical ? " critical" : ""}${dim ? " dim" : ""}${key === hoverKey || (inspected && linkIn(inspected, l)) ? " glow" : ""}`}
             d=${g.d} stroke-width=${ribbonWidth(l.count)} style=${`--rc:${l.critical ? css("--bad") : threadColor(l.color)}`}
-            onClick=${() => store.select({ focus: l.thread, thread: l.thread, allThreads: false })}>
+            onClick=${() => openPair(l)}>
             <title>${l.thread}: ${l.count} messages</title></path>`;
         })}
         ${links.map((l) => {
           const g = ribbonGeometry(l, layout.nodes);
           const list = byKey.get(linkKey(l.source, l.target, l.thread)) || [];
-          const dim = focus && l.thread !== focus;
+          const dim = focus && !linkIn(focus, l);
           const name = (id) => state.agents[id]?.name || id;
-          return html`<g class=${`badge${dim ? " dim" : ""}`} transform=${`translate(${g.mid.x},${g.mid.y})`}>
+          return html`<g class=${`badge link${dim ? " dim" : ""}`} transform=${`translate(${g.mid.x},${g.mid.y})`}
+            onClick=${() => openPair(l)}>
             <rect x="-15" y="-10" width="30" height="20" rx="10" />
             <text y="4">×${l.count}</text>
             <title>${list.slice(-3).map((m) => `${name(m.from)} → ${name(m.to)} (${m.intent}): ${m.body.slice(0, 80)}`).join("\n")}</title>
