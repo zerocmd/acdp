@@ -87,13 +87,13 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; }
 .chip.new { background: var(--search); color: #fff; }
 .query { border-bottom: 1px solid var(--line); padding: 4px 0; }
 
-.registry { padding: 8px; }
+.registry { padding: 8px; font-size: var(--fs-ui); }
 .toolbar { display: flex; gap: 6px; margin-bottom: 8px; }
 .toolbar input { flex: 1; }
 .toolbar button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
 .grid { width: 100%; border-collapse: collapse; }
 .grid th { text-align: left; color: var(--muted); font-weight: 500; border-bottom: 1px solid var(--line); }
-.grid td { border-bottom: 1px solid var(--line); padding: 4px; vertical-align: top; }
+.grid td { border-bottom: 1px solid var(--line); padding: 6px 8px; vertical-align: top; }
 .grid tr.row { cursor: pointer; } .grid tr.row:hover { background: var(--panel-2); }
 .banner { background: var(--bad); color: #fff; padding: 6px 10px; border-radius: 6px; margin-bottom: 8px; }
 .split2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -272,3 +272,10 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; }
 .kv td:first-child { color: var(--muted); white-space: nowrap; }
 .prompt { font-size: calc(13px * var(--text-scale)); max-height: 340px; }
 .raw summary { cursor: pointer; color: var(--accent); margin: 6px 0; }
+
+.m-row, .m-col { font-size: var(--fs-ui); }
+.m-row.sel, .m-col.sel { font-weight: 800; fill: var(--accent); }
+.m-cell.selrow { stroke: var(--accent); stroke-width: 1.5; }
+.m-cell.flash { animation: cellflash 1.2s ease-out; }
+@keyframes cellflash { 0% { fill-opacity: 1; stroke: var(--accent); stroke-width: 3; } }
+@media (prefers-reduced-motion: reduce) { .m-cell.flash { animation: none; } }

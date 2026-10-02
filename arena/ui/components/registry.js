@@ -2,6 +2,7 @@ import { html, useEffect, useState } from "../preact.js";
 import { getJson } from "../api.js";
 import { diffKeys } from "../lib/diff.js";
 import { Checks } from "./steps.js";
+import { Chip, Section } from "./cards.js";
 
 function CardCompare({ entry }) {
   // undefined = loading, null = unavailable, object = loaded.
@@ -80,14 +81,14 @@ export function RegistryView({ store }) {
         return html`<tr class="row" onClick=${() => setOpen(open === e.id ? null : e.id)}>
             <td>${e.name}<div class="muted">${e.id}</div></td><td>${e.organization}</td>
             <td>${(e.capabilities || []).join(", ")}</td>
-            <td class=${v.status === "verified" ? "ok" : v.status === "failed" ? "bad" : "muted"}>${v.status || "unknown"}</td>
+            <td><${Chip} tone=${v.status === "verified" ? "ok" : v.status === "failed" ? "bad" : "neutral"}>${v.status || "unknown"}<//></td>
             <td>${e.last_update ? new Date(e.last_update * 1000).toLocaleTimeString() : "—"}</td>
           </tr>
           ${open === e.id ? html`<tr><td colspan="5">
             <button class="link" onClick=${() => store.select({ agent: e.id, tab: "overview" })}>Open agent</button>
-            <h5>Verification</h5><${Checks} verification=${v} />
-            <h5>Stored entry</h5><pre>${JSON.stringify(e, null, 2)}</pre>
-            <${CardCompare} entry=${e} />
+            <${Section} title="Verification" tone=${v.status === "verified" ? "ok" : "bad"}><${Checks} verification=${v} /><//>
+            <${Section} title="Stored entry"><pre>${JSON.stringify(e, null, 2)}</pre><//>
+            <${Section} title="Stored vs live card" tone="info"><${CardCompare} entry=${e} /><//>
           </td></tr>` : null}`;
       })}
     </table>`}
