@@ -29,7 +29,7 @@ function initialSelection() {
 export function initialState() {
   return {
     mode: "connecting", runId: "", log: "", stopReason: "", paused: false, generation: 0,
-    lastSeq: -1, unknown: 0, animateAfter: Infinity,
+    lastSeq: -1, lastTs: 0, unknown: 0, animateAfter: Infinity,
     agents: {}, order: [], threads: {}, threadOrder: [], messages: [],
     trustByMessage: {}, tasks: {}, taskByMessage: {}, timeline: [],
     highlight: null, lastQuery: null, selection: initialSelection(),
@@ -125,6 +125,7 @@ export function apply(state, event) {
     if (seq <= state.lastSeq) return state;
     state.lastSeq = seq;
   }
+  if (typeof ts === "number" && ts > state.lastTs) state.lastTs = ts;
   if (!HANDLED.includes(type)) {
     state.unknown += 1;
     return state;
@@ -208,12 +209,12 @@ export function apply(state, event) {
     case "decision.rejected": break;
     case "thread.opened":
       state.threads[d.id] = { id: d.id, owner: d.owner, title: d.title, color: d.color,
-        closed: false, reason: "", count: 0, unread: 0 };
+        closed: false, reason: "", count: 0, unread: 0, opened: ts, closedAt: null };
       state.threadOrder.push(d.id);
       system(state, event, `Thread ${d.id} opened: ${d.title}`, d.id, "thread");
       break;
     case "thread.closed":
-      if (state.threads[d.id]) Object.assign(state.threads[d.id], { closed: true, reason: d.reason });
+      if (state.threads[d.id]) Object.assign(state.threads[d.id], { closed: true, reason: d.reason, closedAt: ts });
       system(state, event, `Thread ${d.id} closed (${d.reason})`, d.id, "thread");
       break;
     case "verification.peer_check": {
@@ -250,12 +251,12 @@ export function apply(state, event) {
     case "task.created":
       state.tasks[d.task_id] = { id: d.task_id, requester: d.requester, recipient: d.recipient,
         messageId: d.message_id, threadId: d.thread_id, state: "working", artifact: "", reason: "",
-        replyId: "" };
+        replyId: "", created: ts, updated: ts };
       state.taskByMessage[d.message_id] = d.task_id;
       break;
     case "task.updated":
       if (state.tasks[d.task_id]) Object.assign(state.tasks[d.task_id], {
-        state: d.state, artifact: d.artifact || "", reason: d.reason || "", replyId: d.reply_id || "" });
+        state: d.state, artifact: d.artifact || "", reason: d.reason || "", replyId: d.reply_id || "", updated: ts });
       break;
     default: break;
   }
