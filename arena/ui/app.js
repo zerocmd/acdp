@@ -8,6 +8,7 @@ import { Legend } from "./components/legend.js";
 import { AddAgent } from "./components/addagent.js";
 import { Chat } from "./components/chat.js";
 import { CommsMapView } from "./views/commsmap.js";
+import { ChordView } from "./views/chord.js";
 import { SequenceView } from "./views/sequence.js";
 import { MatrixView } from "./views/matrix.js";
 import { Timeline } from "./components/timeline.js";
@@ -18,6 +19,7 @@ const store = createStore();
 
 export const VIEWS = {
   map: ["Comms Map", CommsMapView],
+  chord: ["Chord", ChordView],
   sequence: ["Sequence", SequenceView],
   matrix: ["Matrix", MatrixView],
   registry: ["Registry", RegistryView],

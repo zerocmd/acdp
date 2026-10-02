@@ -279,3 +279,7 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; }
 .m-cell.flash { animation: cellflash 1.2s ease-out; }
 @keyframes cellflash { 0% { fill-opacity: 1; stroke: var(--accent); stroke-width: 3; } }
 @media (prefers-reduced-motion: reduce) { .m-cell.flash { animation: none; } }
+.chord-arc path { fill: none; stroke-width: 14; stroke-linecap: butt; }
+.chord-arc.failed path { stroke-dasharray: 6 4; }
+.chord-arc text { font-size: var(--fs-ui); font-weight: 700; text-anchor: middle; fill: var(--text); }
+.chord-agent { stroke: var(--panel); stroke-width: 2; cursor: pointer; }
