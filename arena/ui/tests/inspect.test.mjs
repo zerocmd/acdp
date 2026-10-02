@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { apply, initialState } from "../store.js";
-import { inScope, normScope, orgStats, orgTrust, pairScope, pairStats, partnerRows, scopeAgents,
+import { agentLabel, inScope, normScope, orgStats, orgTrust, pairScope, pairStats, partnerRows, scopeAgents,
   scopeKey, scopeLabel, scopeMessages, scopeThreads, summarize, summaryRequest, switchPairLevel,
   threadParticipants, threadStory } from "../lib/inspect.js";
 
@@ -82,7 +82,7 @@ test("scopeAgents and scopeLabel", () => {
   assert.deepEqual([...scopeAgents(s, { kind: "org", domain: "n.example" })].sort(), [FAKE, INTEL, ISAC, SOC].sort());
   assert.deepEqual([...scopeAgents(s, "t2")].sort(), [INTEL, ISAC].sort());
   assert.equal(scopeLabel(s, pairScope(SOC, INTEL)), "Intel ↔ SOC");
-  assert.equal(scopeLabel(s, pairScope("n.example", "h.example", "org")), "Halcyon ↔ Northgate");
+  assert.equal(scopeLabel(s, pairScope("n.example", "h.example", "org")), "Halcyon (h.example) ↔ Northgate");
   assert.equal(scopeLabel(s, "t1"), "t1 Phishing");
   assert.equal(scopeLabel(s, { kind: "org", domain: "i.example" }), "FinShare");
 });
@@ -201,4 +201,28 @@ test("threadParticipants: who brought each agent in", () => {
     { id: FAKE, broughtBy: null, sent: 1, received: 1 },
     { id: ISAC, broughtBy: null, sent: 1, received: 0 },
   ]);
+});
+
+test("scopeLabel adds the domain when two organizations share a name", () => {
+  const s = scenario();
+  assert.equal(scopeLabel(s, pairScope("n.example", "h1.example", "org")), "Halcyon (h1.example) ↔ Northgate");
+  assert.equal(scopeLabel(s, { kind: "org", domain: "h.example" }), "Halcyon (h.example)");
+  assert.equal(scopeLabel(s, { kind: "org", domain: "n.example" }), "Northgate");
+});
+
+test("threadStory keeps only the search that led to each first contact", () => {
+  const s = scenario();
+  s.agents[SOC].queries.push({ seq: 999, ts: 130, agent: SOC, capability: "threat-intel",
+    results: [{ id: INTEL, name: "Intel", status: "verified", new: false }] });
+  const searches = threadStory(s, "t1").filter((x) => x.kind === "search");
+  assert.deepEqual(searches.map((x) => x.ts), [101]);
+});
+
+test("agentLabel adds the domain when two agents share a name", () => {
+  const s = scenario();
+  s.agents[FAKE].name = "Intel";
+  assert.equal(agentLabel(s, FAKE), "Intel (h1.example)");
+  assert.equal(agentLabel(s, INTEL), "Intel (h.example)");
+  assert.equal(agentLabel(s, SOC), "SOC");
+  assert.equal(agentLabel(s, "gone.x.example"), "gone.x.example");
 });

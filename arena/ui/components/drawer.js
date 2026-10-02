@@ -5,6 +5,7 @@ import { liveDataAvailable } from "../store.js";
 import { companyColor } from "../palette.js";
 import { Chip, CodeBox, Section, Stat } from "./cards.js";
 import { Checks, StepChips } from "./steps.js";
+import { BackButton } from "./inspector.js";
 
 const TABS = [["overview", "Overview"], ["card", "Card"], ["prompts", "Prompts"],
   ["activity", "Activity"], ["discovery", "Discovery"]];
@@ -127,7 +128,7 @@ function Activity({ agent, live, state, store }) {
   return html`<div>
     <${Section} title="Agenda" tone="info"><div>${(agent.systemPrompt || "").split("\n\n")[0] || "—"}</div><//>
     <${Section} title="Threads" tone="info">${threads.length ? threads.map((t) => html`<div class="item-row">
-      <button class="link" onClick=${() => store.select({ agent: null, thread: t.id, allThreads: false, focus: t.id })}>${t.id} ${t.title}</button>
+      <button class="link" onClick=${() => store.select({ inspect: { kind: "thread", id: t.id }, thread: t.id, allThreads: false, focus: t.id })}>${t.id} ${t.title}</button>
       <${Chip}>${t.owner === agent.id ? "owner" : "participant"}<//><${Chip} tone=${t.closed ? "neutral" : "ok"}>${t.closed ? "closed" : "open"}<//>
       <span class="muted small">${t.count} msgs</span></div>`) : html`<p class="muted">None.</p>`}<//>
     <${Section} title="Pending inbox" tone="pending">${live ? (live.inbox.length ? live.inbox.map((i) => html`<div class="item-row">
@@ -169,12 +170,13 @@ export function Drawer({ store, state }) {
   const status = agent.status === "verified" ? "ok" : agent.status === "failed" ? "bad" : "pending";
   return html`<section class="drawer">
     <header class="drawer-head">
+      <${BackButton} store=${store} state=${state} />
       <span class="avatar big-avatar" style=${`background:${companyColor(agent.domain)}`}>${agent.model === "sonnet" ? "S" : "H"}</span>
       <div><div class="drawer-name">${agent.name}</div>
         <div class="muted">${agent.organization} · ${agent.domain} · ${agent.model === "sonnet" ? "Sonnet" : "Haiku"}</div></div>
       <span class="spacer"></span>
       <${Chip} tone=${status}>${agent.status}<//>
-      <button aria-label="Close" onClick=${() => store.select({ agent: null })}>×</button>
+      <button aria-label="Close" onClick=${() => store.select({ inspect: null })}>×</button>
     </header>
     <nav class="tabs">${TABS.map(([key, label]) => html`<button class=${tab === key ? "on" : ""}
       onClick=${() => store.select({ tab: key })}>${label}</button>`)}</nav>

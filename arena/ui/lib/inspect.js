@@ -63,17 +63,32 @@ export function scopeAgents(state, scope) {
   return ids;
 }
 
-const agentName = (state, id) => state.agents[id]?.name || id;
+// An agent name, with the domain when another agent uses the same name.
+export function agentLabel(state, id) {
+  const a = state.agents[id];
+  if (!a) return id;
+  const shared = Object.values(state.agents).some((b) => b.name === a.name && b.id !== id);
+  return shared ? `${a.name} (${a.domain})` : a.name;
+}
+const agentName = agentLabel;
 export const orgName = (state, domain) =>
   Object.values(state.agents).find((a) => a.domain === domain)?.organization || domain;
+
+// An organization name, with the domain when another domain uses the same name
+// (an impostor copies the real organization's name).
+export function orgLabel(state, domain) {
+  const name = orgName(state, domain);
+  const shared = Object.values(state.agents).some((a) => a.organization === name && a.domain !== domain);
+  return shared ? `${name} (${domain})` : name;
+}
 
 export function scopeLabel(state, scope) {
   const s = normScope(scope);
   if (!s) return "";
   if (s.kind === "thread") return `${s.id} ${state.threads[s.id]?.title || ""}`.trim();
   if (s.kind === "agent") return agentName(state, s.id);
-  if (s.kind === "org") return orgName(state, s.domain);
-  const name = (x) => (s.level === "org" ? orgName(state, x) : agentName(state, x));
+  if (s.kind === "org") return orgLabel(state, s.domain);
+  const name = (x) => (s.level === "org" ? orgLabel(state, x) : agentName(state, x));
   return `${name(s.a)} ↔ ${name(s.b)}`;
 }
 
@@ -300,15 +315,19 @@ export function threadStory(state, id) {
   const start = t.opened ?? ms[0]?.ts ?? 0;
   const end = t.closedAt ?? Infinity;
   const steps = [{ kind: "opened", ts: start, agent: t.owner, text: t.title }];
-  const members = new Set([t.owner, ...ms.flatMap((m) => [m.from, m.to])]);
-  for (const aid of members) {
-    for (const q of state.agents[aid]?.queries || []) {
-      if (q.ts < start || q.ts > end) continue;
-      const asked = q.results.filter((r) => ms.some((m) => m.from === aid && m.to === r.id && m.ts >= q.ts));
-      if (!asked.length) continue;
-      steps.push({ kind: "search", ts: q.ts, agent: aid,
-        text: `searched ${q.capability}: found ${asked.map((r) => agentName(state, r.id)).join(", ")}` });
-    }
+  // For each sender's first message to a recipient, show the latest search before it
+  // that found the recipient: how the sender found that peer.
+  const firstContact = new Map();
+  for (const m of ms) if (!firstContact.has(`${m.from}>${m.to}`)) firstContact.set(`${m.from}>${m.to}`, m);
+  const shown = new Set();
+  for (const m of firstContact.values()) {
+    const q = [...(state.agents[m.from]?.queries || [])].reverse()
+      .find((x) => x.ts >= start && x.ts <= m.ts && x.ts <= end && x.results.some((r) => r.id === m.to));
+    if (!q || shown.has(q.seq)) continue;
+    shown.add(q.seq);
+    const found = q.results.filter((r) => firstContact.has(`${m.from}>${r.id}`));
+    steps.push({ kind: "search", ts: q.ts, agent: m.from,
+      text: `searched ${q.capability}: found ${found.map((r) => agentName(state, r.id)).join(", ")}` });
   }
   for (const m of ms) {
     steps.push({ kind: "message", ts: m.ts, agent: m.from, to: m.to, intent: m.intent, id: m.id,

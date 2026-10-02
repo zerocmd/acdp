@@ -12,7 +12,7 @@ import { ChordView } from "./views/chord.js";
 import { SequenceView } from "./views/sequence.js";
 import { MatrixView } from "./views/matrix.js";
 import { Timeline } from "./components/timeline.js";
-import { Drawer } from "./components/drawer.js";
+import { Inspector } from "./components/inspector.js";
 import { RegistryView } from "./components/registry.js";
 
 const store = createStore();
@@ -26,7 +26,7 @@ export const VIEWS = {
 };
 
 export function RIGHT(state) {
-  return state.selection.agent && state.agents[state.selection.agent] ? Drawer : Chat;
+  return state.selection.inspect ? Inspector : Chat;
 }
 
 export function TIMELINE() {

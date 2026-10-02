@@ -293,3 +293,24 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; }
 .chord-arc { cursor: pointer; }
 .company-name { cursor: pointer; }
 .chip-info { margin-left: 4px; opacity: .6; } .chip-info:hover { opacity: 1; }
+
+.inspector .insp-title { min-width: 0; }
+.seg { display: inline-flex; margin-left: 6px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; padding: 1px 8px; font-size: var(--fs-ui); }
+.seg button.on { background: var(--accent); color: #fff; }
+.sum-head { font-weight: 700; margin-bottom: 4px; }
+.sum-row { margin: 3px 0; }
+.sum-row .muted { display: inline-block; min-width: 92px; }
+.sum-model { margin-top: 8px; border-top: 1px solid var(--line); padding-top: 6px; }
+.grid th.sortable { cursor: pointer; user-select: none; }
+.pair-strip .pair-arrow { stroke: var(--accent); stroke-width: 2; }
+.pair-strip .pair-arrow.decline, .pair-strip .pair-arrow.challenge { stroke: var(--bad); }
+.pair-strip .pair-arrow.verdict { stroke: var(--ok); stroke-width: 3; }
+.story { padding-left: 20px; margin: 6px 0; }
+.story li { margin: 6px 0; line-height: 1.4; }
+.story li.failed { color: var(--bad); }
+
+.inspector .grid { font-size: var(--fs-ui); }
+.inspector .grid th, .inspector .grid td { padding: 4px 5px; white-space: nowrap; }
+.inspector .grid td:first-child { white-space: normal; }
+.inspector .drawer-body { overflow-x: auto; }
