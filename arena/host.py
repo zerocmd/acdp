@@ -44,8 +44,8 @@ class Settings:
     host: str = "arena"
     port: int = 8080
     max_minutes: float = 20.0
-    max_calls: int = 600
-    rate_per_min: float = 10.0
+    max_calls: int = 2000
+    rate_per_min: float = 40.0
     thread_cap: int = 12
     runs_dir: Path = field(default_factory=lambda: Path("runs"))
     guard_interval: float = 5.0
@@ -57,8 +57,8 @@ class Settings:
             host=env.get("ARENA_HOST", "arena"),
             port=int(env.get("ARENA_PORT", "8080")),
             max_minutes=float(env.get("ARENA_MAX_MINUTES", "20")),
-            max_calls=int(env.get("ARENA_MAX_MODEL_CALLS", "600")),
-            rate_per_min=float(env.get("ARENA_RATE_PER_MIN", "10")),
+            max_calls=int(env.get("ARENA_MAX_MODEL_CALLS", "2000")),
+            rate_per_min=float(env.get("ARENA_RATE_PER_MIN", "40")),
             runs_dir=Path(env.get("ARENA_RUNS_DIR", "runs")),
         )
 
@@ -242,23 +242,23 @@ class Arena:
         return agent
 
     async def setup(self) -> None:
-        """Register the cast in order, then open and seed the investigation thread."""
+        """Register the cast in order, then open and seed one thread per seed."""
         for spec in self.cast.agents:
             try:
                 await self.add_agent(spec)
             except InjectionError as e:
                 self.bus.publish("agent.error", {"id": spec.agent_id, "error": str(e)})
-        seed = self.cast.seed
-        owner = self.agents[seed.owner]
-        thread = self.ctx.threads.open(
-            owner.agent_id, seed.title, closer=self.agents[seed.closer].agent_id,
-            cap=owner.spec.thread_cap,
-        )
-        self.bus.publish("thread.opened", {
-            "id": thread.id, "owner": thread.owner, "title": thread.title,
-            "color": thread.color,
-        })
-        owner.seed(thread.id, seed.brief)
+        for seed in self.cast.seeds:
+            owner = self.agents[seed.owner]
+            thread = self.ctx.threads.open(
+                owner.agent_id, seed.title, closer=self.agents[seed.closer].agent_id,
+                cap=owner.spec.thread_cap,
+            )
+            self.bus.publish("thread.opened", {
+                "id": thread.id, "owner": thread.owner, "title": thread.title,
+                "color": thread.color,
+            })
+            owner.seed(thread.id, seed.brief)
         self.bus.publish(
             "arena.started", {"agents": len(self.agents), "run_id": self.bus.run_id}
         )

@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Tuple
 import yaml
 
 MODEL_IDS = {"sonnet": "claude-sonnet-5-5", "haiku": "claude-haiku-4-5-20251001"}
-ROLES = ("investigation", "agenda", "impostor")
+ROLES = ("investigation", "incident", "agenda", "impostor")
 SECTORS = ("member", "provider", "assurance")
 SLUG_RE = re.compile(r"^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$")
 DEFAULT_CAST = Path(__file__).with_name("cast.yaml")
@@ -83,7 +83,7 @@ class Seed:
 
 @dataclass
 class Cast:
-    seed: Seed
+    seeds: List[Seed]
     agents: List[AgentSpec]
 
     def by_slug(self, slug: str) -> AgentSpec:
@@ -96,5 +96,5 @@ class Cast:
 def load_cast(path: Path = DEFAULT_CAST) -> Cast:
     """Load the cast file. Agent order is registration order."""
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    seed = Seed(**{k: str(v).strip() for k, v in data["seed"].items()})
-    return Cast(seed=seed, agents=[AgentSpec.from_dict(a) for a in data["agents"]])
+    seeds = [Seed(**{k: str(v).strip() for k, v in s.items()}) for s in data["seeds"]]
+    return Cast(seeds=seeds, agents=[AgentSpec.from_dict(a) for a in data["agents"]])

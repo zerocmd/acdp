@@ -202,7 +202,7 @@ from arena.cast import AgentSpec, Cast, Seed  # noqa: E402
 
 def make_cast(*specs: Dict[str, Any], owner: str, closer: str) -> Cast:
     return Cast(
-        seed=Seed(owner=owner, closer=closer, title="Phishing case", brief="Brief."),
+        seeds=[Seed(owner=owner, closer=closer, title="Phishing case", brief="Brief.")],
         agents=[AgentSpec.from_dict(spec_dict(**s)) for s in specs],
     )
 

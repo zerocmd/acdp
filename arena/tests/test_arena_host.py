@@ -185,3 +185,25 @@ def test_no_txt_marks_dns_skipped_and_result_failed():
     assert b["result"] == {"id": "broken.broken.example", "step": "result",
                            "status": "failed",
                            "detail": {"status": "failed", "reasons": ["txt record missing"]}}
+
+
+def test_setup_opens_one_thread_per_seed_in_order():
+    from arena.cast import Cast, Seed
+
+    cast = make_cast(SOC, INTEL, owner="northgate-soc", closer="northgate-soc")
+    second = Seed(owner="halcyon-intel", closer="halcyon-intel",
+                  title="Second case", brief="Brief two.")
+    cast = Cast(seeds=[cast.seeds[0], second], agents=cast.agents)
+    arena = make_arena(cast)
+    asyncio.run(arena.setup())
+    opened = events(arena, "thread.opened")
+    assert [(t["id"], t["title"]) for t in opened] == [
+        ("t1", "Phishing case"), ("t2", "Second case"),
+    ]
+    seed = arena.agents["halcyon-intel"].inbox.get_nowait()
+    assert (seed.thread_id, seed.text) == ("t2", "Brief two.")
+
+
+def test_pacing_defaults():
+    s = Settings.from_env({})
+    assert (s.max_calls, s.rate_per_min) == (2000, 40.0)

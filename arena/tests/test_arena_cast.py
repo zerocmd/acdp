@@ -34,8 +34,8 @@ def test_real_halcyon_registers_before_the_impostor(cast):
 
 
 def test_seed_references_and_needs_resolve(cast):
-    assert cast.by_slug(cast.seed.owner).capability == "soc-investigation"
-    assert cast.by_slug(cast.seed.closer).capability == "coordination"
+    assert cast.by_slug(cast.seeds[0].owner).capability == "soc-investigation"
+    assert cast.by_slug(cast.seeds[0].closer).capability == "coordination"
     provided = {a.capability for a in cast.agents}
     for agent in cast.agents:
         assert set(agent.needs) <= provided, agent.slug
@@ -76,3 +76,8 @@ def test_sector_defaults_and_validation():
     assert AgentSpec.from_dict(_spec_dict(sector="member")).sector == "member"
     with pytest.raises(ValueError, match="sector"):
         AgentSpec.from_dict(_spec_dict(sector="vendor"))
+
+
+def test_incident_role_is_valid():
+    spec = AgentSpec.from_dict(_spec_dict(role="incident", cadence=[30, 45]))
+    assert spec.role == "incident"

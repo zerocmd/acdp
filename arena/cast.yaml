@@ -1,17 +1,17 @@
 # Launch cast. Order is registration order: halcyon-intel registers before
 # lookalike-intel, so the registry anchors "Halcyon Intel" to halcyon-intel.example.
-seed:
-  owner: northgate-soc
-  closer: finshare-isac
-  title: Credential phishing against finance staff
-  brief: |
-    Incident brief for Northgate Bank SOC. Since 07:40 UTC, finance staff got
-    credential-phishing mail that imitates an invoice portal. Sender domains:
-    invoices-northgate.example and secure-docs-share.example. Two users entered
-    credentials. One user then granted OAuth consent to an app named "DocuView Sync"
-    with Mail.Read and offline_access. Host FIN-WS-114 made outbound connections
-    every 60 seconds after the consent. Open the cross-organization investigation.
-    Ask peers for attribution, identity impact, and network evidence.
+seeds:
+  - owner: northgate-soc
+    closer: finshare-isac
+    title: Credential phishing against finance staff
+    brief: |
+      Incident brief for Northgate Bank SOC. Since 07:40 UTC, finance staff got
+      credential-phishing mail that imitates an invoice portal. Sender domains:
+      invoices-northgate.example and secure-docs-share.example. Two users entered
+      credentials. One user then granted OAuth consent to an app named "DocuView Sync"
+      with Mail.Read and offline_access. Host FIN-WS-114 made outbound connections
+      every 60 seconds after the consent. Open the cross-organization investigation.
+      Ask peers for attribution, identity impact, and network evidence.
 
 agents:
   - slug: northgate-soc
