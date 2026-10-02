@@ -5,7 +5,7 @@ import contextlib
 import logging
 import re
 from pathlib import Path
-from typing import List, Literal
+from typing import Annotated, Dict, List, Literal
 
 from fastapi import HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
@@ -16,6 +16,13 @@ from arena.acdp import AcdpError
 from arena.bus import load_log, replay
 from arena.cast import AgentSpec
 from arena.host import Arena, InjectionError
+from arena.summarize import (
+    MAX_BODY,
+    MAX_MESSAGES,
+    SummaryLimit,
+    SummaryUnavailable,
+    build_summary_prompt,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +45,23 @@ class InjectRequest(BaseModel):
 class ReplayRequest(BaseModel):
     log: str = Field(pattern=r"^[A-Za-z0-9_-]{1,80}$")
     speed: float = Field(default=2.0, ge=1, le=10)
+
+
+class SummaryMessage(BaseModel):
+    from_name: str = Field(max_length=120)
+    from_org: str = Field(default="", max_length=120)
+    to_name: str = Field(max_length=120)
+    intent: str = Field(max_length=40)
+    body: str = Field(max_length=MAX_BODY)
+    trust: str = Field(default="", max_length=20)
+    ts: float
+
+
+class SummarizeRequest(BaseModel):
+    kind: Literal["org", "pair", "thread"]
+    title: str = Field(min_length=1, max_length=200)
+    messages: List[SummaryMessage] = Field(min_length=1, max_length=MAX_MESSAGES)
+    facts: Dict[str, Annotated[str, Field(max_length=MAX_BODY)]] = Field(default_factory=dict)
 
 
 class NoCacheStaticFiles(StaticFiles):
@@ -124,6 +148,26 @@ def register_routes(arena: Arena, ui_dir: Path, runs_dir: Path) -> None:
         except (ValueError, InjectionError) as e:
             return JSONResponse({"error": str(e)}, status_code=400)
         return {"id": agent.agent_id, "slug": spec.slug}
+
+    @app.get("/arena/status")
+    async def status() -> dict:
+        return {"summarize": arena.summarizer.available}
+
+    @app.post("/arena/summarize")
+    async def summarize(body: SummarizeRequest):
+        prompt = build_summary_prompt(
+            body.kind, body.title, [m.model_dump() for m in body.messages], body.facts
+        )
+        try:
+            text = await arena.summarizer.summarize(prompt)
+        except SummaryUnavailable as e:
+            return JSONResponse({"error": str(e)}, status_code=503)
+        except SummaryLimit as e:
+            return JSONResponse({"error": str(e)}, status_code=429)
+        except Exception as e:  # model providers raise many error types
+            logger.exception("Summary failed")
+            return JSONResponse({"error": f"model error: {e}"}, status_code=502)
+        return {"summary": text}
 
     @app.get("/arena/agents")
     async def list_agents() -> dict:

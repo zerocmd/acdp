@@ -73,6 +73,7 @@ def create_arena(
         bus=bus,
     )
     register_routes(arena, UI_DIR, settings.runs_dir)
+    arena.summarizer.available = live
     return arena, live
 
 
