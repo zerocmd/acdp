@@ -7,7 +7,7 @@ const PAD = 24;
 const GAP = 16;
 const BAND_HEAD = 28;
 const MIN_BOX_W = 180;
-const BOX_HEAD = 30;
+const BOX_HEAD = 42;
 const AGENT_H = 44;
 
 export function bandOf(sector) {
@@ -76,8 +76,10 @@ export function ribbonGeometry(link, nodes) {
     c1 = { x: p.x + bulge, y: p.y + offset };
     c2 = { x: q.x + bulge, y: q.y + offset };
   } else {
-    c1 = { x: p.x + dx * 0.5, y: p.y + offset };
-    c2 = { x: q.x - dx * 0.5, y: q.y + offset };
+    // Nearly level: sag below the row so the ribbon does not cross its labels.
+    const sag = Math.abs(q.y - p.y) < 40 ? Math.min(160, 40 + Math.abs(dx) * 0.15) : 0;
+    c1 = { x: p.x + dx * 0.5, y: p.y + offset + sag };
+    c2 = { x: q.x - dx * 0.5, y: q.y + offset + sag };
   }
   const f = (n) => Math.round(n * 10) / 10;
   const d = `M${f(p.x)},${f(p.y)} C${f(c1.x)},${f(c1.y)} ${f(c2.x)},${f(c2.y)} ${f(q.x)},${f(q.y)}`;

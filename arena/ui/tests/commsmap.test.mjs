@@ -86,3 +86,15 @@ test("pulse queue caps at 20 and drops the oldest", () => {
   assert.equal(q.length, 20);
   assert.equal(q[0].id, 5);
 });
+
+test("long same-row ribbons sag below the row instead of crossing its labels", () => {
+  const nodes = { a: { x: 100, y: 100 }, b: { x: 900, y: 100 } };
+  const g = ribbonGeometry({ source: "a", target: "b", curvature: 0 }, nodes);
+  assert.ok(g.mid.y > 100 + 60, `mid.y ${g.mid.y}`);
+});
+
+test("organization boxes leave room for the domain under the name", () => {
+  const m = layoutMap([ag("a.n.example", "member")], 1200);
+  const box = m.orgs[0];
+  assert.ok(m.nodes["a.n.example"].y - box.y >= 40 + 22 - 0.001);
+});

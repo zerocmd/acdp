@@ -198,7 +198,7 @@ code.txt { display: inline-block; margin: 1px 4px 1px 0; }
 .org rect { fill: color-mix(in srgb, var(--tone) 8%, var(--panel)); stroke: var(--tone); stroke-width: 1.2; }
 .org.failed rect { stroke-dasharray: 6 4; }
 .org-label { font-size: var(--fs-ui); font-weight: 700; fill: var(--text); }
-.org-domain { font-size: calc(11px * var(--text-scale)); fill: var(--muted); text-anchor: end; }
+.org-domain { font-size: calc(11px * var(--text-scale)); fill: var(--muted); }
 .org.failed .org-label, .org.failed .org-domain { fill: var(--bad); }
 .ribbon { fill: none; stroke: var(--rc); stroke-opacity: .45; stroke-linecap: round; cursor: pointer;
   transition: stroke-opacity .3s; }

@@ -100,8 +100,8 @@ export function CommsMapView({ store, state }) {
         ${layout.orgs.map((o) => html`<g class=${`org${o.failed ? " failed" : ""}`}>
           <rect x=${o.x} y=${o.y} width=${o.w} height=${o.h} rx="10"
             style=${`--tone:${o.failed ? css("--bad") : companyColor(o.domain)}`} />
-          <text class="org-label" x=${o.x + 10} y=${o.y + 20}>${o.organization}</text>
-          <text class="org-domain" x=${o.x + o.w - 10} y=${o.y + 20}>${o.domain}</text>
+          <text class="org-label" x=${o.x + 10} y=${o.y + 18}>${o.organization}</text>
+          <text class="org-domain" x=${o.x + 10} y=${o.y + 33}>${o.domain}</text>
         </g>`)}
         ${links.map((l) => {
           const g = ribbonGeometry(l, layout.nodes);
