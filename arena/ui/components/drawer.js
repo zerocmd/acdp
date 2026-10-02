@@ -126,17 +126,17 @@ function Activity({ agent, live, state, store }) {
   const tone = (s) => (s === "completed" ? "ok" : s === "working" ? "pending" : "bad");
   return html`<div>
     <${Section} title="Agenda" tone="info"><div>${(agent.systemPrompt || "").split("\n\n")[0] || "—"}</div><//>
-    <${Section} title="Threads" tone="info">${threads.length ? threads.map((t) => html`<div class="row">
+    <${Section} title="Threads" tone="info">${threads.length ? threads.map((t) => html`<div class="item-row">
       <button class="link" onClick=${() => store.select({ agent: null, thread: t.id, allThreads: false, focus: t.id })}>${t.id} ${t.title}</button>
       <${Chip}>${t.owner === agent.id ? "owner" : "participant"}<//><${Chip} tone=${t.closed ? "neutral" : "ok"}>${t.closed ? "closed" : "open"}<//>
       <span class="muted small">${t.count} msgs</span></div>`) : html`<p class="muted">None.</p>`}<//>
-    <${Section} title="Pending inbox" tone="pending">${live ? (live.inbox.length ? live.inbox.map((i) => html`<div class="row">
+    <${Section} title="Pending inbox" tone="pending">${live ? (live.inbox.length ? live.inbox.map((i) => html`<div class="item-row">
       ${i.sender} <${Chip}>${i.intent}<//>${i.trust ? html`<${Chip} tone=${i.trust === "verified" ? "ok" : "bad"}>${i.trust}<//>` : null}</div>`)
       : html`<p class="muted">Empty.</p>`) : REPLAY_ONLY}<//>
-    <${Section} title="Recent decisions" tone="neutral">${[...agent.decisions].reverse().map((d) => html`<div class="row">
+    <${Section} title="Recent decisions" tone="neutral">${[...agent.decisions].reverse().map((d) => html`<div class="item-row">
       <${Chip} tone=${d.outcome === "sent" ? "ok" : d.outcome === "wait" ? "neutral" : "pending"}>${d.outcome}<//>
       ${d.decision && d.decision.to ? html`<span class="small">→ ${state.agents[d.decision.to]?.name || d.decision.to} (${d.decision.intent})</span>` : null}</div>`)}<//>
-    <${Section} title="A2A tasks" tone="purple">${tasks.length ? tasks.map((t) => html`<div class="row">
+    <${Section} title="A2A tasks" tone="purple">${tasks.length ? tasks.map((t) => html`<div class="item-row">
       <${Chip} tone=${tone(t.state)}>${t.state}<//>
       ${t.requester === agent.id ? `→ ${state.agents[t.recipient]?.name || t.recipient}` : `← ${state.agents[t.requester]?.name || t.requester}`}
       <span class="muted small">${t.threadId}${t.reason ? ` · ${t.reason}` : ""}</span></div>`) : html`<p class="muted">No A2A tasks.</p>`}<//>
@@ -147,12 +147,12 @@ function Discovery({ agent, state }) {
   const choices = state.messages.filter((m) => m.kind === "message" && m.from === agent.id && (m.lookingFor || m.whyThisPeer));
   return html`<div>
     ${[...agent.queries].reverse().map((q) => html`<${Section} title=${`Search: ${q.capability} · ${new Date(q.ts * 1000).toLocaleTimeString()}`} tone="purple">
-      ${q.results.length ? q.results.map((r) => html`<div class="row"><${Chip} tone=${r.status === "verified" ? "ok" : r.status === "failed" ? "bad" : "neutral"}>${r.status}<//>
+      ${q.results.length ? q.results.map((r) => html`<div class="item-row"><${Chip} tone=${r.status === "verified" ? "ok" : r.status === "failed" ? "bad" : "neutral"}>${r.status}<//>
         ${r.name} <span class="muted small">${r.organization} · ${r.domain}</span>${r.new ? html` <${Chip} tone="purple">new<//>` : null}</div>`)
         : html`<p class="muted">No results.</p>`}<//>`)}
-    <${Section} title="Choices" tone="info">${choices.length ? choices.map((m) => html`<div class="row">→ <strong>${state.agents[m.to]?.name || m.to}</strong>:
+    <${Section} title="Choices" tone="info">${choices.length ? choices.map((m) => html`<div class="item-row">→ <strong>${state.agents[m.to]?.name || m.to}</strong>:
       <em>${m.lookingFor}</em><div class="muted small">${m.whyThisPeer}</div></div>`) : html`<p class="muted">None yet.</p>`}<//>
-    <${Section} title="Trust map" tone="ok">${Object.entries(agent.trust).map(([sender, t]) => html`<div class="row">
+    <${Section} title="Trust map" tone="ok">${Object.entries(agent.trust).map(([sender, t]) => html`<div class="item-row">
       <${Chip} tone=${t.status === "verified" ? "ok" : "bad"}>${t.status}<//> ${state.agents[sender]?.name || sender}
       ${t.reason ? html`<span class="muted small">${t.reason}</span>` : null}</div>`)}<//>
   </div>`;

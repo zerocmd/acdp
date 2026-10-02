@@ -261,7 +261,7 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; }
 .big-avatar { width: calc(40px * var(--text-scale)); height: calc(40px * var(--text-scale)); }
 .small { font-size: var(--fs-ui); }
 .big { font-size: var(--fs-head); font-weight: 700; }
-.row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding: 3px 0; }
+.item-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding: 3px 0; }
 .steps-row { display: flex; gap: 4px; flex-wrap: wrap; }
 .step-chip { border: 1px solid var(--tone); background: color-mix(in srgb, var(--tone) 12%, var(--panel));
   border-radius: 8px; font-size: var(--fs-ui); font-weight: 600; padding: 3px 8px; }
