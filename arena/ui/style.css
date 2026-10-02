@@ -188,3 +188,32 @@ code.txt { display: inline-block; margin: 1px 4px 1px 0; }
   border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; word-break: break-all; }
 .textsize { display: inline-flex; gap: 2px; }
 .textsize button { padding: 1px 6px; }
+
+.map { position: absolute; inset: 0; overflow: hidden; cursor: grab; background: var(--bg); }
+.map:active { cursor: grabbing; }
+.map-svg { display: block; }
+.map-tools { position: absolute; top: 8px; right: 8px; z-index: 3; display: flex; gap: 6px; align-items: center;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; font-size: var(--fs-ui); }
+.band-label { font-size: var(--fs-label); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; fill: var(--muted); }
+.org rect { fill: color-mix(in srgb, var(--tone) 8%, var(--panel)); stroke: var(--tone); stroke-width: 1.2; }
+.org.failed rect { stroke-dasharray: 6 4; }
+.org-label { font-size: var(--fs-ui); font-weight: 700; fill: var(--text); }
+.org-domain { font-size: calc(11px * var(--text-scale)); fill: var(--muted); text-anchor: end; }
+.org.failed .org-label, .org.failed .org-domain { fill: var(--bad); }
+.ribbon { fill: none; stroke: var(--rc); stroke-opacity: .45; stroke-linecap: round; cursor: pointer;
+  transition: stroke-opacity .3s; }
+.ribbon:hover, .ribbon.glow { stroke-opacity: .9; }
+.ribbon.critical { stroke-dasharray: 10 6; }
+.ribbon.dim, .badge.dim, .node.dim { opacity: .1; }
+.node.dim { opacity: .3; }
+.badge rect { fill: var(--panel); stroke: var(--line); }
+.badge text { font-size: calc(11px * var(--text-scale)); font-weight: 700; text-anchor: middle; fill: var(--text); }
+.node { cursor: pointer; }
+.node-ring { fill: none; stroke: var(--ring); stroke-width: 3; transition: stroke .6s; }
+.node.selected .node-ring { stroke-width: 5; }
+.node-badge { font-size: calc(11px * var(--text-scale)); font-weight: 800; text-anchor: middle; fill: #fff; pointer-events: none; }
+.node-label { font-size: var(--fs-ui); fill: var(--text); paint-order: stroke; stroke: var(--bg); stroke-width: 3px; }
+.popup-card { width: 240px; border: 1px solid var(--tone); background: color-mix(in srgb, var(--tone) 8%, var(--panel));
+  border-radius: 10px; padding: 6px 10px; box-shadow: 0 4px 14px rgba(0,0,0,.12); font-size: var(--fs-ui); }
+.popup-head { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.popup-body { font-size: var(--fs-read); line-height: 1.35; margin-top: 2px; max-height: 3.2em; overflow: hidden; }

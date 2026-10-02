@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { scaleTime, convexHull, expandPoints, flowGraph, hullLabelPoint, matrixCells, sequenceRows, threadLinks } from "../lib/layout.js";
+import { scaleTime, matrixCells, sequenceRows, threadLinks } from "../lib/layout.js";
 
 test("scaleTime maps and inverts", () => {
   const s = scaleTime(100, 200, 1000);
@@ -14,18 +14,6 @@ test("scaleTime handles a single instant", () => {
 
 const msg = (seq, from, to, threadId = "t1", intent = "share", trust = null) =>
   ({ kind: "message", id: `m${seq}`, seq, threadId, from, to, intent, color: 0, trust, body: `b${seq}` });
-
-test("convexHull drops interior points", () => {
-  const hull = convexHull([{ x: 0, y: 0 }, { x: 4, y: 0 }, { x: 4, y: 4 }, { x: 0, y: 4 }, { x: 2, y: 2 }]);
-  assert.equal(hull.length, 4);
-  assert.ok(!hull.some((p) => p.x === 2 && p.y === 2));
-});
-
-test("expandPoints and hullLabelPoint", () => {
-  const pts = expandPoints([{ x: 10, y: 10 }], 5);
-  assert.equal(pts.length, 4);
-  assert.deepEqual(hullLabelPoint(convexHull(pts)), { x: 5, y: 5 });
-});
 
 test("threadLinks aggregates per pair and thread with spread curvature", () => {
   const links = threadLinks([msg(1, "a", "b"), msg(2, "b", "a"), msg(3, "a", "b", "t2", "decline")]);
@@ -46,15 +34,6 @@ test("matrixCells counts and flags trust", () => {
   assert.equal(m.cells["a>b"].verified, true);
   assert.equal(m.cells["c>b"].failed, true);
   assert.equal(m.max, 2);
-});
-
-test("flowGraph orders nodes by first appearance and keeps loops", () => {
-  const g = flowGraph([msg(1, "soc", "intel"), msg(2, "intel", "soc", "t1", "reply"),
-    msg(3, "soc", "isac"), msg(4, "isac", "soc", "t1", "verdict"), msg(5, "x", "y", "t2")], "t1");
-  assert.deepEqual(g.nodes, ["soc", "intel", "isac"]);
-  assert.equal(g.root, "soc");
-  assert.deepEqual(g.edges.find((e) => e.from === "isac").intents, ["verdict"]);
-  assert.equal(g.edges.length, 4);
 });
 
 test("sequenceRows merges messages and markers by seq", () => {

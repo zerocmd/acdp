@@ -7,9 +7,8 @@ import { ViewSwitch } from "./components/viewswitch.js";
 import { Legend } from "./components/legend.js";
 import { AddAgent } from "./components/addagent.js";
 import { Chat } from "./components/chat.js";
-import { NetworkView } from "./views/network.js";
+import { CommsMapView } from "./views/commsmap.js";
 import { SequenceView } from "./views/sequence.js";
-import { FlowView } from "./views/flow.js";
 import { MatrixView } from "./views/matrix.js";
 import { Timeline } from "./components/timeline.js";
 import { Drawer } from "./components/drawer.js";
@@ -17,11 +16,9 @@ import { RegistryView } from "./components/registry.js";
 
 const store = createStore();
 
-// Tasks 10, 13, 14, and 15 add entries.
 export const VIEWS = {
-  network: ["Network", NetworkView],
+  map: ["Comms Map", CommsMapView],
   sequence: ["Sequence", SequenceView],
-  flow: ["Flow", FlowView],
   matrix: ["Matrix", MatrixView],
   registry: ["Registry", RegistryView],
 };
@@ -68,7 +65,7 @@ function Splitter() {
 
 function App() {
   const state = useStoreState();
-  const view = VIEWS[state.selection.view] || VIEWS.network;
+  const view = VIEWS[state.selection.view] || VIEWS.map;
   const View = view[1];
   const Right = RIGHT(state);
   const Timeline = TIMELINE();

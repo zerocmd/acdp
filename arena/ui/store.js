@@ -22,7 +22,7 @@ const LANE = {
 };
 
 function initialSelection() {
-  return { agent: null, thread: "t1", allThreads: false, range: null, view: "network",
+  return { agent: null, thread: "t1", allThreads: false, range: null, view: "map",
     tab: "overview", adding: false, allQueries: false, pair: null, focus: null, hoverMessage: null };
 }
 

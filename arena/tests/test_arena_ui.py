@@ -14,10 +14,10 @@ UI = Path(__file__).resolve().parents[1] / "ui"
 UI_FILES = ["preact.js", "api.js", "app.js", "store.js", "palette.js", "style.css",
             "components/topbar.js", "components/sidebar.js", "components/viewswitch.js",
             "components/legend.js", "components/addagent.js", "components/chat.js",
-            "views/network.js", "components/timeline.js", "lib/layout.js",
+            "views/commsmap.js", "components/timeline.js", "lib/layout.js",
             "components/drawer.js", "components/steps.js",
             "components/registry.js", "lib/diff.js", "views/sequence.js",
-            "views/flow.js", "views/matrix.js", "lib/textscale.js",
+            "components/popup.js", "views/matrix.js", "lib/textscale.js",
             "components/cards.js", "components/textsize.js"]
 
 
@@ -26,13 +26,14 @@ def test_ui_files_are_served(tmp_path):
     register_routes(arena, UI, tmp_path)
     client = TestClient(arena.app)
     index = client.get("/").text
-    for url in ("cdn.jsdelivr.net/npm/force-graph@1", "cdn.jsdelivr.net/npm/@dagrejs/dagre@1"):
-        assert url in index
+    for url in ("force-graph", "dagre"):
+        assert url not in index, url
     assert 'import("/ui/app.js")' in index
     assert "htm@3/preact/standalone.module.js" in (UI / "preact.js").read_text()
     for name in UI_FILES:
         assert client.get(f"/ui/{name}").status_code == 200, name
-    for old in ("graph.js", "transcript.js", "controls.js"):
+    for old in ("graph.js", "transcript.js", "controls.js", "views/network.js",
+                "views/flow.js"):
         assert not (UI / old).exists(), old
 
 

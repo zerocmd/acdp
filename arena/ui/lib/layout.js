@@ -6,33 +6,6 @@ export function scaleTime(t0, t1, width) {
   return { x: (ts) => ((ts - t0) / span) * width, t: (x) => t0 + (x / width) * span };
 }
 
-export function expandPoints(points, pad) {
-  return points.flatMap((p) => [
-    { x: p.x - pad, y: p.y - pad }, { x: p.x + pad, y: p.y - pad },
-    { x: p.x + pad, y: p.y + pad }, { x: p.x - pad, y: p.y + pad },
-  ]);
-}
-
-export function convexHull(points) {
-  const pts = [...points].sort((a, b) => a.x - b.x || a.y - b.y);
-  if (pts.length < 3) return pts;
-  const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
-  const half = (list) => {
-    const out = [];
-    for (const p of list) {
-      while (out.length >= 2 && cross(out[out.length - 2], out[out.length - 1], p) <= 0) out.pop();
-      out.push(p);
-    }
-    out.pop();
-    return out;
-  };
-  return half(pts).concat(half([...pts].reverse()));
-}
-
-export function hullLabelPoint(hull) {
-  return hull.reduce((best, p) => (p.y < best.y || (p.y === best.y && p.x < best.x) ? p : best), hull[0]);
-}
-
 export function threadLinks(messages) {
   const links = new Map();
   for (const m of messages) {
@@ -69,21 +42,6 @@ export function matrixCells(messages, ids) {
     max = Math.max(max, cell.count);
   }
   return { ids, cells, max };
-}
-
-export function flowGraph(messages, threadId) {
-  const ms = messages.filter((m) => m.kind === "message" && m.threadId === threadId);
-  const nodes = [];
-  const edges = new Map();
-  for (const m of ms) {
-    for (const id of [m.from, m.to]) if (!nodes.includes(id)) nodes.push(id);
-    const key = `${m.from}>${m.to}`;
-    if (!edges.has(key)) edges.set(key, { from: m.from, to: m.to, count: 0, intents: [] });
-    const e = edges.get(key);
-    e.count += 1;
-    if (!e.intents.includes(m.intent)) e.intents.push(m.intent);
-  }
-  return { nodes, edges: [...edges.values()], root: ms[0]?.from || null };
 }
 
 export function sequenceRows(messages, markers) {

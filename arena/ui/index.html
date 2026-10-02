@@ -5,21 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ACDP Arena Workbench</title>
   <link rel="stylesheet" href="/ui/style.css">
-  <script src="https://cdn.jsdelivr.net/npm/force-graph@1/dist/force-graph.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@dagrejs/dagre@1/dist/dagre.min.js"></script>
 </head>
 <body>
   <div id="root"></div>
   <div id="boot-error" class="boot-error" hidden></div>
   <script type="module">
-    const fail = (what) => {
+    import("/ui/app.js").catch((e) => {
       const box = document.getElementById("boot-error");
-      box.textContent = `The Workbench could not load ${what}. Check access to cdn.jsdelivr.net, then reload.`;
+      box.textContent = `The Workbench could not load its modules (${e.message}). Check access to cdn.jsdelivr.net, then reload.`;
       box.hidden = false;
-    };
-    if (typeof ForceGraph === "undefined") fail("force-graph");
-    else if (typeof dagre === "undefined") fail("dagre");
-    else import("/ui/app.js").catch((e) => fail(`the UI modules (${e.message})`));
+    });
   </script>
 </body>
 </html>
