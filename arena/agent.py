@@ -325,6 +325,7 @@ class ArenaAgent:
             system_prompt=system_prompt(self.spec),
             callback_handler=None,
         )
+        self.ctx.bus.publish("decision.started", {"agent": self.agent_id})
         self.ctx.guard.note_call()
         try:
             result = await asyncio.wait_for(

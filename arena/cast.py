@@ -9,6 +9,7 @@ import yaml
 
 MODEL_IDS = {"sonnet": "claude-sonnet-5-5", "haiku": "claude-haiku-4-5-20251001"}
 ROLES = ("investigation", "agenda", "impostor")
+SECTORS = ("member", "provider", "assurance")
 SLUG_RE = re.compile(r"^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$")
 DEFAULT_CAST = Path(__file__).with_name("cast.yaml")
 
@@ -27,6 +28,7 @@ class AgentSpec:
     cadence: Tuple[float, float]
     system_prompt: str
     thread_cap: int = 12
+    sector: str = "provider"
 
     @property
     def agent_id(self) -> str:
@@ -54,6 +56,7 @@ class AgentSpec:
                 cadence=cadence,  # type: ignore[arg-type]
                 system_prompt=str(data["system_prompt"]).strip(),
                 thread_cap=int(data.get("thread_cap", 12)),
+                sector=str(data.get("sector", "provider")),
             )
         except (KeyError, TypeError) as e:
             raise ValueError(f"invalid agent spec: {e}") from e
@@ -63,6 +66,8 @@ class AgentSpec:
             raise ValueError(f"model must be one of {sorted(MODEL_IDS)}")
         if spec.role not in ROLES:
             raise ValueError(f"role must be one of {ROLES}")
+        if spec.sector not in SECTORS:
+            raise ValueError(f"sector must be one of {SECTORS}")
         if len(spec.cadence) != 2 or not 0 < spec.cadence[0] <= spec.cadence[1]:
             raise ValueError("cadence must be [low, high] seconds")
         return spec

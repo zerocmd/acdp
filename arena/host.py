@@ -177,6 +177,7 @@ class Arena:
             "id": agent_id, "slug": spec.slug, "name": spec.name,
             "organization": spec.organization, "domain": spec.domain,
             "capability": spec.capability, "model": spec.model, "role": spec.role,
+            "sector": spec.sector,
             "did": identity.did, "needs": list(spec.needs),
             "cadence": list(spec.cadence), "system_prompt": system_prompt(spec),
         })

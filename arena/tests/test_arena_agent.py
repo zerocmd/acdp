@@ -57,7 +57,10 @@ def test_tick_sends_signed_message_on_new_thread():
         "http://arena:8080/agents/northgate-soc/.well-known/agent-card.json"
     )
     assert verify_signature(message.payload(), ident.public_jwk())
-    assert types(ctx) == ["discovery.query", "thread.opened", "decision.made", "message.sent"]
+    assert types(ctx) == [
+        "discovery.query", "decision.started", "thread.opened", "decision.made",
+        "message.sent",
+    ]
     assert ctx.threads.get("t1").messages == [message]
     assert ctx.guard.calls == 1
 
@@ -374,3 +377,12 @@ def test_closed_thread_request_with_unreachable_peer_ends_as_failed():
     assert updates == [{"task_id": "k0", "state": "failed", "artifact": "",
                         "reason": "peer unreachable after thread closed", "reply_id": ""}]
     assert agent.open_requests == {}
+
+
+def test_decision_started_precedes_decision_made():
+    agent, ctx, _, _ = make_agent(lambda p: {"action": "wait"})
+    asyncio.run(agent.tick())
+    kinds = [e["type"] for e in ctx.bus.history if e["type"].startswith("decision.")]
+    assert kinds == ["decision.started", "decision.made"]
+    started = [e for e in ctx.bus.history if e["type"] == "decision.started"][0]
+    assert started["data"] == {"agent": agent.agent_id}

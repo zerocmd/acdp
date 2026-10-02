@@ -32,6 +32,7 @@ class InjectRequest(BaseModel):
     agenda: str = Field(default="", max_length=1000)
     generate: bool = False
     misconfigure: Literal["none", "no_txt", "wrong_key"] = "none"
+    sector: Literal["member", "provider", "assurance"] = "provider"
 
 
 class ReplayRequest(BaseModel):
@@ -113,6 +114,7 @@ def register_routes(arena: Arena, ui_dir: Path, runs_dir: Path) -> None:
                 "needs": body.needs,
                 "model": body.model,
                 "role": "agenda",
+                "sector": body.sector,
                 "cadence": INJECTED_CADENCE,
                 "system_prompt": prompt,
             })

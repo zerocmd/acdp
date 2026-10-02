@@ -4,7 +4,7 @@
 export const HANDLED = [
   "bus.reset", "arena.started", "arena.idle", "arena.paused", "arena.resumed", "arena.stopped",
   "agent.registered", "agent.verified", "agent.verification_failed", "agent.error",
-  "registration.step", "discovery.query", "decision.made", "decision.rejected",
+  "registration.step", "discovery.query", "decision.started", "decision.made", "decision.rejected",
   "thread.opened", "thread.closed", "message.sent", "message.failed",
   "verification.peer_check", "task.created", "task.updated",
 ];
@@ -179,6 +179,7 @@ export function apply(state, event) {
       if (query.results.some((r) => r.new)) state.highlight = query;
       break;
     }
+    case "decision.started": break;
     case "decision.made": {
       const a = ensureAgent(state, d.agent);
       keepLast(a.decisions, { ...d, seq, ts });

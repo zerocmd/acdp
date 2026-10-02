@@ -69,3 +69,10 @@ def _spec_dict(**change):
     }
     data.update(change)
     return data
+
+
+def test_sector_defaults_and_validation():
+    assert AgentSpec.from_dict(_spec_dict()).sector == "provider"
+    assert AgentSpec.from_dict(_spec_dict(sector="member")).sector == "member"
+    with pytest.raises(ValueError, match="sector"):
+        AgentSpec.from_dict(_spec_dict(sector="vendor"))

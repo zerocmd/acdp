@@ -160,3 +160,16 @@ def test_registry_proxy_returns_502_when_unreachable(setup):
     response = client.get("/arena/registry")
     assert response.status_code == 502
     assert "registry unreachable" in response.json()["error"]
+
+
+def test_injected_agent_defaults_to_provider_sector(setup):
+    arena, client, _ = setup
+    assert client.post("/arena/agents", json=INJECT).status_code == 201
+    registered = [e["data"] for e in arena.bus.history if e["type"] == "agent.registered"]
+    assert registered[-1]["sector"] == "provider"
+    body = dict(INJECT, name="Member Desk", sector="member")
+    assert client.post("/arena/agents", json=body).status_code == 201
+    assert [e["data"] for e in arena.bus.history
+            if e["type"] == "agent.registered"][-1]["sector"] == "member"
+    bad = dict(INJECT, name="Bad", sector="x")
+    assert client.post("/arena/agents", json=bad).status_code == 422
