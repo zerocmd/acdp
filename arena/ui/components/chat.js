@@ -57,6 +57,6 @@ export function Chat({ store, state }) {
         : html`<${Bubble} m=${m} state=${state} all=${all} />`)}
       ${items.length ? null : html`<p class="muted">No messages in this view yet.</p>`}
     </div>
-    ${follow ? null : html`<button class="pill" onClick=${() => setFollow(true)}>New messages ↓</button>`}
+    ${follow ? null : html`<button class="pill-btn" onClick=${() => setFollow(true)}>New messages ↓</button>`}
   </div>`;
 }

@@ -1,5 +1,6 @@
 import { html, useEffect, useState } from "../preact.js";
 import { getJson, postJson } from "../api.js";
+import { TextSize } from "./textsize.js";
 
 function modeLabel(state) {
   if (state.mode === "replay") return `replay ${state.log}`;
@@ -41,6 +42,7 @@ export function Topbar({ store, state }) {
     <label class="muted">Speed <input type="range" min="1" max="10" value=${speed}
       onInput=${(e) => setSpeed(Number(e.target.value))} /></label>
     <button onClick=${replay} disabled=${!log || busy}>Replay</button>
+    <${TextSize} />
     <button class="primary" onClick=${() => store.select({ adding: true })}>+ Agent</button>
   </header>`;
 }

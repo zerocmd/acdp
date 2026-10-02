@@ -32,6 +32,8 @@ export function AddAgent({ store, state }) {
       <label>Organization <input name="organization" required maxlength="80" /></label>
       <label>Domain <input name="domain" required placeholder="coastal-bank.example" /></label>
       <label>Capability <input name="capability" required pattern="[a-z0-9-]{1,40}" /></label>
+      <label>Sector <select name="sector"><option value="provider">Provider</option>
+        <option value="member">Member</option><option value="assurance">Assurance</option></select></label>
       <label>Needs (comma-separated) <input name="needs" placeholder="soc-investigation" /></label>
       <label>Model <select name="model"><option value="haiku">Haiku</option><option value="sonnet">Sonnet</option></select></label>
       <label>Agenda <textarea name="agenda" rows="3" maxlength="1000"></textarea></label>

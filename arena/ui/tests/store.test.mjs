@@ -159,3 +159,39 @@ test("live data is available only in live and stopped modes", () => {
   assert.equal(liveDataAvailable("replay"), false);
   assert.equal(liveDataAvailable("idle"), false);
 });
+
+test("thinking intervals open on decision.started and close on decision.made", () => {
+  const s = run([
+    agent("t.x.example"),
+    ev("decision.started", { agent: "t.x.example" }, 10),
+    ev("decision.made", { agent: "t.x.example", prompt: "P", decision: null, outcome: "wait" }, 12),
+  ]);
+  const a = s.agents["t.x.example"];
+  assert.equal(a.thinking, null);
+  assert.deepEqual(a.intervals, [{ start: 10, end: 12, outcome: "wait" }]);
+});
+
+test("agent.error closes an open thinking interval", () => {
+  const s = run([
+    agent("e.x.example"),
+    ev("decision.started", { agent: "e.x.example" }, 20),
+    ev("agent.error", { id: "e.x.example", error: "timeout" }, 25),
+  ]);
+  assert.deepEqual(s.agents["e.x.example"].intervals, [{ start: 20, end: 25, outcome: "error" }]);
+  assert.equal(s.agents["e.x.example"].thinking, null);
+});
+
+test("sector, system item kinds, and focus defaults", () => {
+  const s = run([
+    agent("s.x.example", { sector: "member" }),
+    agent("p.x.example"),
+    ev("agent.verified", { id: "s.x.example" }),
+    ev("thread.opened", { id: "t1", owner: "s.x.example", title: "case", color: 0 }),
+    ev("arena.stopped", { reason: "done" }),
+  ]);
+  assert.equal(s.agents["s.x.example"].sector, "member");
+  assert.equal(s.agents["p.x.example"].sector, "provider");
+  assert.deepEqual(s.messages.map((m) => m.sub), ["setup", "setup", "setup", "thread", "run"]);
+  assert.equal(s.selection.focus, null);
+  assert.equal(s.selection.hoverMessage, null);
+});

@@ -23,7 +23,7 @@ const LANE = {
 
 function initialSelection() {
   return { agent: null, thread: "t1", allThreads: false, range: null, view: "network",
-    tab: "overview", adding: false, allQueries: false, pair: null };
+    tab: "overview", adding: false, allQueries: false, pair: null, focus: null, hoverMessage: null };
 }
 
 export function initialState() {
@@ -40,6 +40,7 @@ function agentRecord(id) {
   return {
     id, slug: id.split(".")[0], name: id, organization: "", domain: id.split(".").slice(1).join("."),
     capability: "", needs: [], model: "", role: "", cadence: null, did: "", systemPrompt: "",
+    sector: "provider", thinking: null, intervals: [],
     status: "pending", reasons: [], steps: {}, trust: {}, queries: [], decisions: [],
     counters: { sent: 0, received: 0, rejected: 0, errors: 0 }, lastPrompt: "", lastDecision: null,
   };
@@ -58,8 +59,15 @@ function keepLast(list, item, size = KEEP) {
   if (list.length > size) list.splice(0, list.length - size);
 }
 
-function system(state, event, text, threadId = null) {
-  keepLast(state.messages, { kind: "system", id: `s${event.seq}`, seq: event.seq, ts: event.ts, threadId, text }, MAX_MESSAGES);
+function system(state, event, text, threadId = null, sub = "run") {
+  keepLast(state.messages, { kind: "system", sub, id: `s${event.seq}`, seq: event.seq, ts: event.ts,
+    threadId, text }, MAX_MESSAGES);
+}
+
+function closeThinking(a, ts, outcome) {
+  if (!a.thinking) return;
+  keepLast(a.intervals, { start: a.thinking.start, end: ts, outcome }, 50);
+  a.thinking = null;
 }
 
 function laneAgent(type, d) {
@@ -142,9 +150,9 @@ export function apply(state, event) {
         slug: d.slug || a.slug, name: d.name || a.name, organization: d.organization || "",
         domain: d.domain || a.domain, capability: d.capability || "", needs: d.needs || [],
         model: d.model || "", role: d.role || "", cadence: d.cadence || null, did: d.did || "",
-        systemPrompt: d.system_prompt || a.systemPrompt,
+        systemPrompt: d.system_prompt || a.systemPrompt, sector: d.sector || "provider",
       });
-      system(state, event, `${a.name} (${a.organization}, ${a.domain}) joined`);
+      system(state, event, `${a.name} (${a.organization}, ${a.domain}) joined`, null, "setup");
       break;
     }
     case "registration.step": {
@@ -158,17 +166,18 @@ export function apply(state, event) {
     }
     case "agent.verified":
       ensureAgent(state, d.id).status = "verified";
-      system(state, event, `${state.agents[d.id].name} verified by the registry`);
+      system(state, event, `${state.agents[d.id].name} verified by the registry`, null, "setup");
       break;
     case "agent.verification_failed": {
       const a = ensureAgent(state, d.id);
       a.status = "failed";
       a.reasons = d.reasons || [];
-      system(state, event, `${a.name} failed verification: ${a.reasons.join("; ")}`);
+      system(state, event, `${a.name} failed verification: ${a.reasons.join("; ")}`, null, "setup");
       break;
     }
     case "agent.error":
       ensureAgent(state, d.id).counters.errors += 1;
+      closeThinking(ensureAgent(state, d.id), ts, "error");
       system(state, event, `${d.id} error: ${d.error}`);
       break;
     case "discovery.query": {
@@ -179,9 +188,10 @@ export function apply(state, event) {
       if (query.results.some((r) => r.new)) state.highlight = query;
       break;
     }
-    case "decision.started": break;
+    case "decision.started": ensureAgent(state, d.agent).thinking = { start: ts }; break;
     case "decision.made": {
       const a = ensureAgent(state, d.agent);
+      closeThinking(a, ts, d.outcome || "");
       keepLast(a.decisions, { ...d, seq, ts });
       if ((d.outcome || "").startsWith("rejected")) a.counters.rejected += 1;
       a.lastPrompt = d.prompt || "";
@@ -193,11 +203,11 @@ export function apply(state, event) {
       state.threads[d.id] = { id: d.id, owner: d.owner, title: d.title, color: d.color,
         closed: false, reason: "", count: 0, unread: 0 };
       state.threadOrder.push(d.id);
-      system(state, event, `Thread ${d.id} opened: ${d.title}`, d.id);
+      system(state, event, `Thread ${d.id} opened: ${d.title}`, d.id, "thread");
       break;
     case "thread.closed":
       if (state.threads[d.id]) Object.assign(state.threads[d.id], { closed: true, reason: d.reason });
-      system(state, event, `Thread ${d.id} closed (${d.reason})`, d.id);
+      system(state, event, `Thread ${d.id} closed (${d.reason})`, d.id, "thread");
       break;
     case "verification.peer_check": {
       const trust = { status: d.status, reason: d.reason || "" };
