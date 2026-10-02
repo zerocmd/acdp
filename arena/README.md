@@ -2,7 +2,7 @@
 
 This guide shows how to start the arena, watch a run, add an agent while the arena runs, and replay a saved run.
 
-The arena runs ten LLM agents from different organizations. The agents find each other through ACDP, check each other with DNS-pinned Ed25519 keys, and talk over A2A. One agent is an impostor that uses the lookalike domain `halcyon-inte1.example`. The other agents detect it and decline it. For the design, see [the spec](../docs/superpowers/specs/2026-10-01-acdp-agent-arena-design.md).
+The arena runs 34 LLM agents from 17 organizations. The agents find each other through ACDP, check each other with DNS-pinned Ed25519 keys, and talk over A2A. Six scenarios run at the same time: a phishing investigation, a ransomware incident, vendor procurement, indicator sharing, audit and underwriting evidence, and vendor security reviews. Two agents are impostors. One uses the lookalike domain `halcyon-inte1.example`; the other uses `coastline-mdr.example` (the real Coastline MDR domain is `coastlinemdr.example`). The other agents detect them and decline them. For the design, see [the spec](../docs/superpowers/specs/2026-10-01-acdp-agent-arena-design.md).
 
 ## What runs
 
@@ -10,7 +10,7 @@ The arena runs ten LLM agents from different organizations. The agents find each
 | --- | --- | --- |
 | `bind` | 53 (DNS), 8053 (DNS API) | BIND9. Holds one DNS zone for each company domain and the TXT key pins. |
 | `registry` | 5001 | ACDP registry. Checks each Agent Card against DNS and records the result. |
-| `arena` | 8080 | The ten agents, the event stream, and the browser UI. |
+| `arena` | 8080 | The 34 agents, the event stream, and the browser UI. |
 
 ## Before you start
 
@@ -21,7 +21,7 @@ You need:
 - Free ports 53, 5001, 8053, and 8080 on your machine.
 - Network access for the first build. The build pulls base images and installs packages.
 
-A live run calls Claude models and costs credits. By default, a run stops after 20 minutes or 600 model decisions, whichever comes first.
+A live run calls Claude models and costs credits. A 34-agent run costs about 3 to 4 times a 10-agent run. By default, a run stops after 20 minutes or 2,000 model decisions, whichever comes first. The arena sends at most 40 messages per minute.
 
 ## Step 1: Get the code
 
@@ -40,7 +40,8 @@ To use smaller limits, set them before you start:
 
 ```bash
 export ARENA_MAX_MINUTES=10        # default 20
-export ARENA_MAX_MODEL_CALLS=200   # default 600
+export ARENA_MAX_MODEL_CALLS=200   # default 2000
+export ARENA_RATE_PER_MIN=20       # default 40
 ```
 
 ## Step 3: Build and start the stack
@@ -58,7 +59,7 @@ docker compose ps
 curl -s localhost:5001/health
 ```
 
-All three services show `running`. The registry shows `healthy`. The health call returns `{"agent_count":10,"status":"ok"}` after the agents register.
+All three services show `running`. The registry shows `healthy`. The health call returns `{"agent_count":34,"status":"ok"}` after the agents register.
 
 Check the verification results:
 
@@ -66,7 +67,7 @@ Check the verification results:
 curl -s localhost:5001/agents | python3 -m json.tool | grep -c '"status": "verified"'
 ```
 
-The command prints `9`. Nine agents pass verification. The impostor fails with the reason `organization registered under halcyon-intel.example`.
+The command prints `32`. All agents except the two impostors pass verification. The impostors fail with the reasons `organization registered under halcyon-intel.example` and `organization registered under coastlinemdr.example`.
 
 To see a key pin in DNS:
 
@@ -82,9 +83,9 @@ Open <http://localhost:8080>. The Workbench has five areas:
 
 | Area | What it shows |
 | --- | --- |
-| Top bar | The run mode (`live`, `replay`, `idle`, `stopped`), counts of agents, messages, and open threads, **Pause**/**Resume**, the replay controls, and **+ Agent**. |
+| Top bar | The run mode (`live`, `replay`, `idle`, `stopped`), counts of agents, messages, and open threads, **Pause**/**Resume**, the replay controls, **A−**/**A+** (text size), and **+ Agent**. |
 | Sidebar (left) | The agents, grouped by company, with a status dot (green verified, amber pending, red failed) and a model badge (`S` Sonnet, `H` Haiku). Below it, a registry summary. Click an agent to open its details. |
-| View area (center) | Five views. Switch between them with the buttons above the area. |
+| View area (center) | Five views: Comms Map (the default), Chord, Sequence, Matrix, and Registry. Switch between them with the buttons above the area. |
 | Timeline (below the view) | Four lanes: Register, Discover, Verify, and Message. Each dot is one event. Hover a dot for a summary. Click it to open the agent. Drag across the strip to set a time range; the views and the chat then show only that range. |
 | Right column | The chat, or the agent drawer when an agent is selected. |
 
@@ -94,22 +95,41 @@ Press Esc to clear the selection and the time range.
 
 | View | Use it to see |
 | --- | --- |
-| Network | Who talks to whom. Each company is an outline with a small label. Each pair of agents has one edge per thread; red edges are declines and challenges. During a discovery search, the searcher gets a purple ring and dashed purple lines to each result, for about 2 seconds. Results that are new to the searcher show "new". Select **show every search** to highlight every query, not only queries with new results. |
-| Sequence | The order of events. One lane per agent; time flows down. Arrows are messages, labelled with their intent. Purple diamonds are discovery searches; green diamonds are verification checks. Brackets on the requester's lane show A2A tasks from request to answer. |
-| Flow | The shape of one thread, left to right from the agent that opened it. Replies and loops curve back as dashed lines. |
-| Matrix | Senders (rows) by recipients (columns). Darker cells mean more messages. A red border means the recipient's trust check failed. Click a cell to show only that pair in the chat. |
+| Comms Map | Who talks to whom, and the traffic as it happens. Organizations are boxes in three bands: Members (banks and credit unions), Providers (vendors), and Assurance (the ISAC, auditors, and insurers). Agents sit in their organization's box; positions do not move during a run. One ribbon joins each pair of agents on each thread. A ribbon gets wider as the pair sends more messages, and its badge shows the count (×N). Red dashed ribbons carry declines and challenges. Impostor organizations have dashed red boxes. Zoom with the mouse wheel, drag the background to pan, and click **Fit** to reset. Click a ribbon to focus its thread; everything else dims. Click the focus chip to clear it. |
+| Chord | The same traffic as a ring. Each organization is an arc; the arc length follows its agent count. Each ribbon is a chord across the ring. Focus and hover work as on the Comms Map. |
+| Sequence | The order of events in real time. One lane per agent; time flows down, with a clock on the left. Gaps longer than 20 seconds collapse into a "⋯ N s" spacer. Arrow width shows message size. Purple bars left of a lane show when the agent was thinking; dots right of it show each decision's outcome (blue sent, grey wait, amber rejected, red error). Purple diamonds are discovery searches; green diamonds are verification checks. Brackets show A2A tasks. Only lanes with activity show; select **Show all lanes** to see every agent. Hover an arrow to see the message; click it to focus its thread. |
+| Matrix | Senders (rows) by recipients (columns). Darker cells mean more messages. A red border means the recipient's trust check failed. When a thread is in focus, the counts show only that thread. The selected agent's row and column are outlined, and a cell flashes when a new message arrives. Click a cell to show only that pair in the chat. |
 | Registry | The registry's entries. Search and filter by status. Expand a row to see each verification check, the stored entry, and the stored card next to the live card. The **Organizations** tab shows which domain anchors each organization name. |
+
+### Animations
+
+New events animate on the Comms Map. A reload or a new replay draws the final state and does not replay old animations.
+
+| Event | What you see |
+| --- | --- |
+| Message | A pulse runs along the ribbon from the sender to the recipient (about 1 second). A card with the sender, recipient, intent, and the start of the message shows next to the ribbon for about 4 seconds. At most 3 cards show at a time. |
+| Decline or challenge | The pulse is red, and the recipient's node shakes. |
+| Verdict | A green ring bursts around the recipient. |
+| Discovery search | A purple ring around the searcher and dashed purple lines to each result, for about 2 seconds. Results that are new to the searcher show "new". Select **show every search** to show every query, not only queries with new results. |
+| Registration | An amber ring when an agent joins. A failed registration shakes the node red. |
+| A2A task | A badge near the requester's end of the ribbon: `…` working, `✓` completed, `✕` rejected or canceled. |
+
+With the system setting "reduce motion" on, pulses, shakes, and bursts do not show. Cards still show.
+
+### Text size
+
+Click **A−** or **A+** in the top bar to change the size of all text, from 85% to 130%. Double-click either button to reset to 100%. The browser keeps your choice.
 
 ### Chat
 
-The chat shows one thread at a time. Pick a thread with the chips at the top, or click **All threads** to see every message in time order. Each message shows the sender, company, domain, recipient, intent, and the recipient's trust check. A purple line shows what the sender was looking for and why it picked this peer. A message that failed the trust check has a dashed red border. A request shows the state of its A2A task: `working`, `completed`, `rejected`, or `canceled`.
+The chat shows one thread at a time. Pick a thread with the chips at the top, or click **All threads** to see every message in time order. A Setup card at the top counts the agents that joined, passed, and failed verification; click **show details** to see each step. Each message shows the sender, company, domain, recipient, intent, and the recipient's trust check. A purple line shows what the sender was looking for and why it picked this peer. A message that failed the trust check has a dashed red border. A request shows the state of its A2A task: `working`, `completed`, `rejected`, or `canceled`. New messages glow for a moment. Hover a message to highlight its ribbon on the Comms Map. Click a message to focus its thread on the Comms Map, the Sequence view, and the Matrix.
 
 ### Agent drawer
 
 | Tab | What it shows |
 | --- | --- |
-| Overview | Role, capability, needs, cadence, state, counters, the seven registration steps (identity, zone, DNS, card, submitted, registry checks, result), and the DNS records as published. |
-| Card | The live Agent Card: a summary and the raw JSON. If the live card is not available, the stored registry card. |
+| Overview | Sections for activity counters, role (capability, sector, needs), the seven registration steps as chips (click a step to see its detail), the identity (DID and key fingerprint, with **Copy**), the DNS records as published, and the registry checks. |
+| Card | The live Agent Card in sections: provider, skills, and the ACDP identity extension. The raw JSON is collapsed. If the live card is not available, the stored registry card. |
 | Prompts | The system prompt, the last turn prompt as the model received it, and the last decision with its outcome. |
 | Activity | The agenda, the agent's threads, its pending inbox (live runs only), its recent decisions, and its A2A tasks. |
 | Discovery | Each search with its results and their registry status, the peers the agent chose and why, and its trust map. |
@@ -130,13 +150,15 @@ Run logs include the full turn prompt of every decision. A 20-minute live run ma
 
 What to look for:
 
-1. The SOC Investigator (Northgate Bank) gets the incident brief and opens thread `t1`.
-2. Threat intel, identity, network, and peer SOC agents share findings on `t1`.
-3. The impostor sends its first message after 2 to 3 minutes. Peers see `trust=failed (domain mismatch)` and send `decline` or `challenge`. The UI shows these in red.
-4. The ISAC Coordinator closes `t1` with a `verdict` after at least three investigation agents have shared findings.
-5. The procurement, exposure, and sales agents run their own threads at the same time.
+1. **Phishing (thread `t1`).** The SOC Investigator (Northgate Bank) gets the incident brief and opens `t1`. Threat intel, identity, network, and peer SOC agents share findings. The ISAC Coordinator closes `t1` with a `verdict` after at least three investigation agents have shared findings.
+2. **Ransomware (thread `t2`).** The Meridian CISO engages Ironclad IR, notifies the Sentinel Mutual claims desk, and asks Meridian Counsel about notification duties. Ironclad IR closes `t2` with a `verdict`.
+3. **Procurement.** Northgate and Pinecrest procurement ask vendors' sales agents for quotes. Northgate Procurement asks Legal and Finance before it chooses.
+4. **Indicator sharing.** Pinecrest and Harborview SOCs share indicators through the ISAC Sharing Desk, and the Corvid feed enriches them.
+5. **Audit and underwriting.** Ledgerline Audit and Sentinel Underwriting ask the banks' compliance agents for evidence.
+6. **Vendor security reviews.** Northgate Third-Party Risk sends security questions to the vendors' trust desks.
+7. **Impostors.** The Halcyon Intel impostor and the Coastline MDR impostor send their first messages after 2 to 3 minutes. Peers see `trust=failed (domain mismatch)` and send `decline` or `challenge`. The UI shows these in red.
 
-In the Network view, watch for discovery: when an agent searches the registry, purple lines connect it to each result. After you add an agent, the next search by an agent that needs its capability marks it "new".
+On the Comms Map, watch for discovery: when an agent searches the registry, purple lines connect it to each result. After you add an agent, the next search by an agent that needs its capability marks it "new".
 
 Click **Pause** to freeze all agents. Click **Resume** to continue.
 
@@ -151,6 +173,7 @@ You can add an agent from the UI or with an HTTP request. Both use the same inpu
 | **Name** / `name` | Yes | 1 to 60 characters | The display name in the graph and transcript. The arena also makes the agent's short name (slug) from it. For example, `Northwind Intel` becomes `northwind-intel`. The slug must not already be in use. |
 | **Organization** / `organization` | Yes | 1 to 80 characters | The company that the agent claims to belong to. The registry anchors each organization name to the first domain that registers it. If you use the name of an existing organization with a different domain, the agent fails verification, as the impostor does. |
 | **Domain** / `domain` | Yes | A DNS name that ends with `.example`, `.local`, `extrahop.com`, or `tenable.com` | The company domain. The arena creates a DNS zone for it if none exists, and publishes the agent's records and key pin there. The agent id is `<slug>.<domain>`, for example `northwind-intel.northwind.example`. |
+| **Sector** / `sector` | No | `member`, `provider` (default), or `assurance` | The band on the Comms Map where the agent's organization shows. Members are banks and credit unions, providers are vendors, and assurance is the ISAC, auditors, and insurers. |
 | **Capability** / `capability` | Yes | Lowercase letters, digits, and hyphens, 1 to 40 characters | What the agent offers. Other agents search the registry by capability. They find the new agent only if their own needs include this capability. |
 | **Needs** / `needs` | No | Comma-separated in the UI; a list in JSON | The capabilities the new agent looks for on each turn. These decide which peers it can start a conversation with. With no needs, it can only reply to agents that message it first. |
 | **Model** / `model` | No | `haiku` (default) or `sonnet` | The Claude model that makes the agent's decisions. Sonnet is better at weighing evidence. Haiku is faster and costs less. |
@@ -208,8 +231,8 @@ The response is `201` with the new agent's id and slug:
 
 ### What you see
 
-1. A new node appears in its own cluster, labelled `Northwind Threat Labs (northwind.example)`, with an amber border.
-2. The border turns green when the registry verifies the agent.
+1. A new box for `Northwind Threat Labs` (`northwind.example`) appears in the Providers band, and the node has an amber ring.
+2. The ring turns green when the registry verifies the agent.
 3. Within about 20 seconds, the SOC agents' discovery includes `northwind-intel.northwind.example`.
 4. The new agent takes its first turn after 40 to 60 seconds.
 
@@ -217,8 +240,8 @@ The response is `201` with the new agent's id and slug:
 
 Use the same example with **Misconfigure** set and a new name, for example `Northwind Intel 2`:
 
-- **Missing TXT record** (`no_txt`): the node turns red. The transcript shows `failed verification: txt record missing`.
-- **Wrong key in DNS** (`wrong_key`): the node turns red. The transcript shows `failed verification: key mismatch`.
+- **Missing TXT record** (`no_txt`): the node ring turns red. The chat shows `failed verification: txt record missing`.
+- **Wrong key in DNS** (`wrong_key`): the node ring turns red. The chat shows `failed verification: key mismatch`.
 
 To show the impostor pattern, set **Organization** to `Halcyon Intel` and **Domain** to `halcyon-intel-labs.example`. The transcript shows `failed verification: organization registered under halcyon-intel.example`.
 
@@ -266,7 +289,7 @@ To check the whole stack without model calls, set the call limit to zero:
 ARENA_MAX_MODEL_CALLS=0 docker compose up -d --build
 ```
 
-All ten agents register and the registry verifies them. The arena then stops before any agent makes a model call. Steps 4 and 5 work as normal. The run log shows `arena.stopped` with the reason `model call limit reached`.
+All 34 agents register, and the registry verifies all of them except the two impostors. The arena then stops before any agent makes a model call. Steps 4 and 5 work as normal. The run log shows `arena.stopped` with the reason `model call limit reached`.
 
 ## Run the arena without Docker
 
@@ -310,7 +333,8 @@ The script reads the newest run log and checks three things: messages on thread 
 | `ANTHROPIC_API_KEY` | unset | Model access. Without it, the arena starts in replay-only mode. |
 | `MODEL_PROVIDER` | `anthropic` | `anthropic` or `bedrock`. Bedrock needs `MODEL_ID_SONNET`, `MODEL_ID_HAIKU`, and AWS credentials. |
 | `ARENA_MAX_MINUTES` | `20` | Time limit for a run. |
-| `ARENA_MAX_MODEL_CALLS` | `600` | Limit on model decisions for a run. |
+| `ARENA_MAX_MODEL_CALLS` | `2000` | Limit on model decisions for a run. |
+| `ARENA_RATE_PER_MIN` | `40` | Limit on messages per minute across all agents. |
 | `REGISTRY_CARD_HOSTS` | `arena` | Hosts that the registry can fetch Agent Cards from. Compose sets it. |
 
 ## Troubleshooting
