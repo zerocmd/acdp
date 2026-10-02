@@ -5,6 +5,7 @@ import { html, useEffect, useMemo, useRef, useState } from "../preact.js";
 import { companyColor, threadColor, TRUST_TOKENS } from "../palette.js";
 import { threadLinks } from "../lib/layout.js";
 import { BAND_LABELS, layoutMap, ribbonGeometry, ribbonWidth } from "../lib/commsmap.js";
+import { useMapEffects } from "./mapfx.js";
 
 export const linkKey = (a, b, thread) => `${[a, b].sort().join("|")}|${thread}`;
 const nodeRadius = (n) => Math.min(20, 14 + 2 * Math.log2(1 + n));
@@ -83,6 +84,7 @@ export function CommsMapView({ store, state }) {
   const hoverKey = hover ? linkKey(hover.from, hover.to, hover.threadId) : null;
   const css = (name) => `var(${name})`;
   const scene = { layout, links, byKey, view, focus, inFocus };
+  const effects = useMapEffects(state, scene);
 
   return html`<div class="map" ref=${box} onWheel=${onWheel} onMouseDown=${onDown}>
     <div class="map-tools">
@@ -126,7 +128,7 @@ export function CommsMapView({ store, state }) {
           if (!n) return null;
           const r = nodeRadius(activity[a.id] || 0);
           const dim = focus && !inFocus.has(a.id);
-          return html`<g class=${`node ${a.status}${dim ? " dim" : ""}${state.selection.agent === a.id ? " selected" : ""}`}
+          return html`<g class=${`node ${a.status}${dim ? " dim" : ""}${state.selection.agent === a.id ? " selected" : ""}${effects.shaking.has(a.id) ? " shake" : ""}`}
             data-id=${a.id} transform=${`translate(${n.x},${n.y})`}
             onClick=${() => store.select({ agent: a.id, tab: "overview" })}>
             <circle class="node-fill" r=${r} fill=${companyColor(a.domain)} />
@@ -135,7 +137,9 @@ export function CommsMapView({ store, state }) {
             <text class="node-label" x=${r + 10} y="4">${a.name}</text>
           </g>`;
         })}
+        ${effects.svgLayer}
       </g>
     </svg>
+    <div class="popup-layer">${effects.overlay}</div>
   </div>`;
 }

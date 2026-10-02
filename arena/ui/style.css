@@ -217,3 +217,27 @@ code.txt { display: inline-block; margin: 1px 4px 1px 0; }
   border-radius: 10px; padding: 6px 10px; box-shadow: 0 4px 14px rgba(0,0,0,.12); font-size: var(--fs-ui); }
 .popup-head { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
 .popup-body { font-size: var(--fs-read); line-height: 1.35; margin-top: 2px; max-height: 3.2em; overflow: hidden; }
+
+.pulse line { stroke-width: 5; stroke-linecap: round; opacity: .55; }
+.pulse circle { filter: drop-shadow(0 0 4px rgba(0,0,0,.25)); }
+.popup-layer { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.popup-wrap { position: absolute; left: 0; top: 0; animation: pop-in 4s ease forwards; }
+@keyframes pop-in { 0% { opacity: 0; translate: 0 6px; } 8% { opacity: 1; translate: 0 0; } 85% { opacity: 1; } 100% { opacity: 0; } }
+.search-ring { fill: none; stroke: var(--search); stroke-width: 2; animation: ring 2s ease-out forwards; transform-box: fill-box; transform-origin: center; }
+@keyframes ring { from { transform: scale(.6); opacity: 1; } to { transform: scale(1.4); opacity: 0; } }
+.search-line { stroke: var(--search); stroke-width: 1.8; stroke-dasharray: 6 4; animation: fade 2s forwards; }
+.search-new, .search-label { font-size: var(--fs-ui); font-weight: 700; fill: var(--search); text-anchor: middle; }
+@keyframes fade { 0%, 70% { opacity: 1; } 100% { opacity: 0; } }
+.burst { fill: none; stroke: var(--ok); stroke-width: 4; animation: ring .8s ease-out forwards; transform-box: fill-box; transform-origin: center; }
+.joined { fill: none; stroke: var(--pending); stroke-width: 3; animation: ring .8s ease-out forwards; transform-box: fill-box; transform-origin: center; }
+.node.shake { animation: shake .3s; transform-box: fill-box; }
+@keyframes shake { 25% { translate: -4px 0; } 75% { translate: 4px 0; } }
+.task-badge circle { fill: var(--panel); stroke-width: 2; }
+.task-badge text { font-size: calc(11px * var(--text-scale)); font-weight: 800; text-anchor: middle; }
+.task-badge.working circle { stroke: var(--pending); } .task-badge.working text { fill: var(--pending); }
+.task-badge.completed circle { stroke: var(--ok); } .task-badge.completed text { fill: var(--ok); }
+.task-badge.rejected circle, .task-badge.canceled circle, .task-badge.failed circle { stroke: var(--bad); }
+.task-badge.rejected text, .task-badge.canceled text, .task-badge.failed text { fill: var(--bad); }
+@media (prefers-reduced-motion: reduce) {
+  .popup-wrap, .search-ring, .search-line, .burst, .joined, .node.shake { animation: none; }
+}
