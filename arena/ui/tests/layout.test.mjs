@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { scaleTime, matrixCells, sequenceRows, threadLinks } from "../lib/layout.js";
+import { scaleTime, matrixCells, threadLinks } from "../lib/layout.js";
 
 test("scaleTime maps and inverts", () => {
   const s = scaleTime(100, 200, 1000);
@@ -36,7 +36,3 @@ test("matrixCells counts and flags trust", () => {
   assert.equal(m.max, 2);
 });
 
-test("sequenceRows merges messages and markers by seq", () => {
-  const rows = sequenceRows([msg(2, "a", "b"), msg(5, "b", "a")], [{ seq: 3, agent: "a", lane: "discover", label: "q" }]);
-  assert.deepEqual(rows.map((r) => [r.index, r.kind, r.seq]), [[0, "message", 2], [1, "marker", 3], [2, "message", 5]]);
-});

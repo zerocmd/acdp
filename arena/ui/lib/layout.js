@@ -43,11 +43,3 @@ export function matrixCells(messages, ids) {
   }
   return { ids, cells, max };
 }
-
-export function sequenceRows(messages, markers) {
-  const items = [
-    ...messages.filter((m) => m.kind === "message").map((m) => ({ ...m, kind: "message" })),
-    ...markers.map((m) => ({ ...m, kind: "marker" })),
-  ].sort((a, b) => a.seq - b.seq);
-  return items.map((item, index) => ({ ...item, index }));
-}
