@@ -1,51 +1,54 @@
-import { html } from "../preact.js";
+// Registration steps as a compact chip row; click a step to see its detail.
+import { html, useState } from "../preact.js";
+import { Chip, CodeBox } from "./cards.js";
 
 export const STEP_LABELS = [
-  ["identity", "Identity minted"], ["zone", "Zone ready"], ["dns", "DNS published"],
-  ["card", "Agent Card served"], ["submitted", "Submitted to registry"],
-  ["checks", "Registry checks"], ["result", "Result"],
+  ["identity", "Identity"], ["zone", "Zone"], ["dns", "DNS"], ["card", "Card"],
+  ["submitted", "Submitted"], ["checks", "Checks"], ["result", "Result"],
 ];
-
-const mark = (ok) => (ok ? "✓" : "✕");
 
 export function Checks({ verification }) {
   if (!verification) return null;
   const v = verification;
-  const rows = [
-    ["card re-fetched", v.card_fetched], ["TXT record found", v.dns_found],
-    ["key matches DNS", v.key_matches_dns],
-    ["organization anchor", v.org_conflict === undefined ? undefined : !v.org_conflict],
-  ];
-  return html`<ul class="checks">
-    ${rows.filter(([, ok]) => ok !== undefined).map(([label, ok]) =>
-      html`<li class=${ok ? "ok" : "bad"}>${mark(ok)} ${label}</li>`)}
-    ${v.canonical_domain ? html`<li class="muted">canonical domain: ${v.canonical_domain}</li>` : null}
-    ${(v.reasons || []).map((r) => html`<li class="bad">${r}</li>`)}
-    ${v.checked_at ? html`<li class="muted">checked ${v.checked_at}</li>` : null}
-  </ul>`;
+  const rows = [["card re-fetched", v.card_fetched], ["TXT found", v.dns_found],
+    ["key matches DNS", v.key_matches_dns], ["org anchor", v.org_conflict === undefined ? undefined : !v.org_conflict]];
+  const shown = rows.filter(([, ok]) => ok !== undefined);
+  return html`<div>
+    ${!shown.length && v.status ? html`<${Chip} tone=${v.status === "verified" ? "ok" : "bad"}>${v.status}<//>` : null}
+    ${shown.map(([label, ok]) => html`<${Chip} tone=${ok ? "ok" : "bad"}>${ok ? "✓" : "✕"} ${label}<//>`)}
+    ${(v.reasons || []).map((r) => html`<${Chip} tone="bad">${r}<//>`)}
+    ${v.canonical_domain ? html`<div class="muted small">canonical domain ${v.canonical_domain}${v.checked_at ? ` · checked ${v.checked_at.slice(11, 19)} UTC` : ""}</div>` : null}
+  </div>`;
 }
 
-function detail(step, d) {
+function Detail({ step, d }) {
+  if (d.error) return html`<${Chip} tone="bad">${d.error}<//>`;
   switch (step) {
-    case "identity": return html`<div><code>${d.did}</code><div class="muted">fingerprint <code>${d.fingerprint}</code></div></div>`;
-    case "zone": return html`<code>${d.zone}</code> <span class="muted">(${d.result})</span>`;
-    case "dns": return d.skipped ? html`<span class="muted">skipped (no TXT record)</span>`
-      : d.error ? html`<span class="bad">${d.error}</span>`
-      : html`<div>SRV <code>${d.srv}</code><div>TXT ${(d.txt || []).map((t) => html`<code class="txt">${t}</code>`)}</div></div>`;
-    case "card": return html`<a href=${new URL(d.card_url).pathname} target="_blank">${new URL(d.card_url).pathname}</a>`;
+    case "identity": return html`<div class="muted small">DID</div><${CodeBox} text=${d.did} />
+      <div class="muted small">Key fingerprint</div><${CodeBox} text=${d.fingerprint} />`;
+    case "zone": return html`<div><code>${d.zone}</code> <${Chip}>${d.result}<//></div>`;
+    case "dns": return d.skipped ? html`<${Chip} tone="pending">skipped: no TXT record<//>` : html`<div>
+      <${CodeBox} text=${`SRV ${d.srv}`} />
+      <table class="kv">${(d.txt || []).map((t) => { const [k, ...rest] = t.split("="); return html`<tr><td>${k}</td><td>${rest.join("=")}</td></tr>`; })}</table></div>`;
+    case "card": return html`<a href=${new URL(d.card_url, location.href).pathname} target="_blank">${new URL(d.card_url, location.href).pathname}</a>`;
     case "checks": return html`<${Checks} verification=${d} />`;
-    case "result": return html`<span class=${d.status === "verified" ? "ok" : "bad"}>${d.status}</span>
-      ${(d.reasons || []).length ? html` — ${d.reasons.join("; ")}` : null}`;
-    default: return d.error ? html`<span class="bad">${d.error}</span>` : null;
+    case "result": return html`<${Chip} tone=${d.status === "verified" ? "ok" : "bad"}>${d.status}<//>
+      ${(d.reasons || []).map((r) => html`<${Chip} tone="bad">${r}<//>`)}`;
+    default: return null;
   }
 }
 
-export function Stepper({ agent }) {
-  return html`<ol class="stepper">
-    ${STEP_LABELS.map(([step, label]) => {
-      const s = agent.steps[step];
-      const cls = !s ? "pending" : s.status === "ok" ? "ok" : s.status === "skipped" ? "skipped" : "bad";
-      return html`<li class=${cls}><strong>${label}</strong>${s ? html`<div>${detail(step, s.detail)}</div>` : html`<div class="muted">—</div>`}</li>`;
-    })}
-  </ol>`;
+export function StepChips({ agent }) {
+  const [open, setOpen] = useState(null);
+  return html`<div>
+    <div class="steps-row">
+      ${STEP_LABELS.map(([step, label], i) => {
+        const s = agent.steps[step];
+        const tone = !s ? "neutral" : s.status === "ok" ? "ok" : s.status === "skipped" ? "pending" : "bad";
+        return html`<button class=${`step-chip${open === step ? " open" : ""}`} style=${`--tone:var(--${tone === "neutral" ? "line" : tone === "pending" ? "pending" : tone})`}
+          disabled=${!s} onClick=${() => setOpen(open === step ? null : step)}>${i + 1} ${label}</button>`;
+      })}
+    </div>
+    ${open && agent.steps[open] ? html`<div class="step-detail"><${Detail} step=${open} d=${agent.steps[open].detail} /></div>` : null}
+  </div>`;
 }
