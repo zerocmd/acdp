@@ -4,7 +4,7 @@
 import { html, useEffect, useMemo, useRef, useState } from "../preact.js";
 import { companyColor, threadColor, TRUST_TOKENS } from "../palette.js";
 import { threadLinks } from "../lib/layout.js";
-import { BAND_LABELS, layoutMap, ribbonGeometry, ribbonWidth } from "../lib/commsmap.js";
+import { applyOffsets, BAND_LABELS, layoutMap, ribbonGeometry, ribbonWidth } from "../lib/commsmap.js";
 import { useMapEffects } from "./mapfx.js";
 
 export const linkKey = (a, b, thread) => `${[a, b].sort().join("|")}|${thread}`;
@@ -32,14 +32,27 @@ export function CommsMapView({ store, state }) {
 
   const agents = state.order.map((id) => state.agents[id]);
   const statusKey = agents.map((a) => `${a.id}:${a.status}:${a.sector}`).join("|");
-  const layout = useMemo(() => layoutMap(agents, size.w), [statusKey, size.w]);
+  // Dragged organizations keep their offsets until the page reloads.
+  const [offsets, setOffsets] = useState({});
+  const base = useMemo(() => layoutMap(agents, size.w), [statusKey, size.w]);
+  const layout = useMemo(() => applyOffsets(base, offsets), [base, offsets]);
   const fit = () => setView({ k: clamp(Math.min(size.w / layout.width, size.h / layout.height, 1), 0.4, 1), x: 0, y: 0 });
   useEffect(fit, [agents.length, size.w, size.h]);
 
   useEffect(() => {
     const move = (e) => {
-      if (!drag.current) return;
-      setView((v) => ({ ...v, x: drag.current.vx + e.clientX - drag.current.x, y: drag.current.vy + e.clientY - drag.current.y }));
+      const d = drag.current;
+      if (!d) return;
+      if (d.kind === "org") {
+        const dx = (e.clientX - d.x) / d.k;
+        const dy = (e.clientY - d.y) / d.k;
+        // Under 4 px the press stays a click.
+        if (!d.moved && Math.hypot(e.clientX - d.x, e.clientY - d.y) < 4) return;
+        d.moved = true;
+        setOffsets((o) => ({ ...o, [d.domain]: { dx: d.start.dx + dx, dy: d.start.dy + dy } }));
+        return;
+      }
+      setView((v) => ({ ...v, x: d.vx + e.clientX - d.x, y: d.vy + e.clientY - d.y }));
     };
     const up = () => { drag.current = null; };
     window.addEventListener("mousemove", move);
@@ -58,6 +71,13 @@ export function CommsMapView({ store, state }) {
   };
   const onDown = (e) => {
     if (e.target.closest(".node, .ribbon, .badge, .map-tools")) return;
+    const org = e.target.closest(".org");
+    if (org) {
+      const domain = org.dataset.domain;
+      drag.current = { kind: "org", domain, x: e.clientX, y: e.clientY, k: view.k, moved: false,
+        start: offsets[domain] || { dx: 0, dy: 0 } };
+      return;
+    }
     drag.current = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y };
   };
 
@@ -89,6 +109,7 @@ export function CommsMapView({ store, state }) {
   return html`<div class="map" ref=${box} onWheel=${onWheel} onMouseDown=${onDown}>
     <div class="map-tools">
       <button onClick=${fit}>Fit</button>
+      ${Object.keys(offsets).length ? html`<button onClick=${() => setOffsets({})}>Reset layout</button>` : null}
       ${focus ? html`<button class="pill" style="--tone:var(--accent)" onClick=${() => store.select({ focus: null })}>
         Focus: ${focus} ${state.threads[focus]?.title?.slice(0, 32) || ""} ×</button>` : null}
       <label><input type="checkbox" checked=${state.selection.allQueries}
@@ -97,7 +118,7 @@ export function CommsMapView({ store, state }) {
     <svg class="map-svg" width="100%" height="100%">
       <g transform=${`translate(${view.x},${view.y}) scale(${view.k})`}>
         ${layout.bands.map((b) => html`<text class="band-label" x=${b.x} y="34">${BAND_LABELS[b.band]}</text>`)}
-        ${layout.orgs.map((o) => html`<g class=${`org${o.failed ? " failed" : ""}`}>
+        ${layout.orgs.map((o) => html`<g class=${`org${o.failed ? " failed" : ""}`} data-domain=${o.domain}>
           <rect x=${o.x} y=${o.y} width=${o.w} height=${o.h} rx="10"
             style=${`--tone:${o.failed ? css("--bad") : companyColor(o.domain)}`} />
           <text class="org-label" x=${o.x + 10} y=${o.y + 18}>${o.organization}</text>

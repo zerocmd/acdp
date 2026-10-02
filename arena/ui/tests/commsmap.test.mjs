@@ -126,3 +126,17 @@ test("bands share the width by organization count, so laptop widths stay readabl
     assert.ok(o.x >= band.x - 0.001 && o.x + o.w <= band.x + band.w + 0.001);
   }
 });
+
+test("applyOffsets moves an organization box with its agents and leaves the input unchanged", async () => {
+  const { applyOffsets } = await import("../lib/commsmap.js");
+  const m = layoutMap([ag("a.n.example", "member"), ag("b.n.example", "member"), ag("c.p.example", "provider")], 1200);
+  const before = JSON.stringify(m);
+  const box = m.orgs.find((o) => o.domain === "n.example");
+  const moved = applyOffsets(m, { "n.example": { dx: 50, dy: -20 }, "gone.example": { dx: 9, dy: 9 } });
+  const out = moved.orgs.find((o) => o.domain === "n.example");
+  assert.deepEqual([out.x, out.y], [box.x + 50, box.y - 20]);
+  assert.deepEqual(moved.nodes["a.n.example"], { x: m.nodes["a.n.example"].x + 50, y: m.nodes["a.n.example"].y - 20 });
+  assert.deepEqual(moved.nodes["c.p.example"], m.nodes["c.p.example"]);
+  assert.equal(JSON.stringify(m), before);
+  assert.equal(applyOffsets(m, {}), m);
+});

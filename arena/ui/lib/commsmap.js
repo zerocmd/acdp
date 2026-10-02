@@ -138,3 +138,20 @@ export function capQueue(queue, item, max) {
 export function popupBox(scale = 1) {
   return { w: Math.round(250 * scale), h: Math.round(130 * scale) };
 }
+
+// Move organization boxes and their agent nodes by per-domain offsets
+// ({domain: {dx, dy}}). Returns a new layout; the input stays unchanged.
+export function applyOffsets(layout, offsets) {
+  if (!Object.keys(offsets).length) return layout;
+  const nodes = { ...layout.nodes };
+  const orgs = layout.orgs.map((o) => {
+    const off = offsets[o.domain];
+    if (!off) return o;
+    for (const a of o.agents) {
+      const n = nodes[a.id];
+      if (n) nodes[a.id] = { x: n.x + off.dx, y: n.y + off.dy };
+    }
+    return { ...o, x: o.x + off.dx, y: o.y + off.dy };
+  });
+  return { ...layout, orgs, nodes };
+}

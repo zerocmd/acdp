@@ -283,3 +283,7 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; }
 .chord-arc.failed path { stroke-dasharray: 6 4; }
 .chord-arc text { font-size: var(--fs-ui); font-weight: 700; text-anchor: middle; fill: var(--text); }
 .chord-agent { stroke: var(--panel); stroke-width: 2; cursor: pointer; }
+
+.org rect { cursor: grab; }
+.map:active .org rect { cursor: grabbing; }
+.org-label, .org-domain { pointer-events: none; }
