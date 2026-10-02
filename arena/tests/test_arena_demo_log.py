@@ -19,5 +19,12 @@ def test_demo_log_contains_the_workbench_event_families(tmp_path):
     types = {e["type"] for e in events}
     assert {"registration.step", "discovery.query", "decision.made", "message.sent",
             "verification.peer_check", "thread.closed", "arena.stopped"} <= types
-    gaps = {round(b["ts"] - a["ts"], 3) for a, b in zip(events, events[1:])}
-    assert gaps == {2.0}
+    stamps = [e["ts"] for e in events]
+    assert stamps == sorted(stamps)
+    closed = {e["data"]["id"] for e in events if e["type"] == "thread.closed"}
+    assert {"t1", "t2"} <= closed
+    declines = [e["data"] for e in events if e["type"] == "message.sent"
+                and e["data"]["intent"] == "decline"]
+    assert {d["to_id"] for d in declines} == {
+        "lookalike-intel.halcyon-inte1.example", "coastline-impostor.coastline-mdr.example"}
+    assert len({e["data"]["id"] for e in events if e["type"] == "agent.registered"}) == 35

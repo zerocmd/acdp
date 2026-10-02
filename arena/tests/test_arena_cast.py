@@ -10,41 +10,56 @@ def cast():
     return load_cast()
 
 
-def test_ten_agents_with_unique_slugs(cast):
+IMPOSTORS = {"lookalike-intel": "halcyon-intel", "coastline-impostor": "coastline-sales"}
+
+
+def test_thirty_four_agents_with_unique_slugs(cast):
     slugs = [a.slug for a in cast.agents]
-    assert len(slugs) == 10
-    assert len(set(slugs)) == 10
+    assert len(slugs) == 34
+    assert len(set(slugs)) == 34
 
 
-def test_models_and_roles(cast):
+def test_roles_and_models(cast):
     count = lambda **kw: sum(  # noqa: E731
-        all(getattr(a, k) == v for k, v in kw.items()) for a in cast.agents
-    )
-    assert count(model="sonnet", role="investigation") == 6
-    assert count(model="haiku", role="agenda") == 3
-    assert count(model="haiku", role="impostor") == 1
+        all(getattr(a, k) == v for k, v in kw.items()) for a in cast.agents)
+    assert count(role="investigation") == 6
+    assert count(role="investigation", model="sonnet") == 6
+    assert count(role="incident") == 4 and count(role="incident", model="sonnet") == 2
+    assert count(role="agenda") == 22 and count(role="agenda", model="haiku") == 22
+    assert count(role="impostor") == 2 and count(role="impostor", model="haiku") == 2
 
 
-def test_real_halcyon_registers_before_the_impostor(cast):
+def test_real_organizations_register_before_their_impostors(cast):
     order = [a.slug for a in cast.agents]
-    assert order.index("halcyon-intel") < order.index("lookalike-intel")
-    impostor = cast.by_slug("lookalike-intel")
-    assert impostor.organization == "Halcyon Intel"
-    assert impostor.domain == "halcyon-inte1.example"
+    for impostor, real in IMPOSTORS.items():
+        assert order.index(real) < order.index(impostor)
+        fake, genuine = cast.by_slug(impostor), cast.by_slug(real)
+        assert fake.organization == genuine.organization
+        assert fake.domain != genuine.domain
 
 
-def test_seed_references_and_needs_resolve(cast):
-    assert cast.by_slug(cast.seeds[0].owner).capability == "soc-investigation"
-    assert cast.by_slug(cast.seeds[0].closer).capability == "coordination"
+def test_seeds_and_needs_resolve(cast):
+    assert [s.title for s in cast.seeds] == [
+        "Credential phishing against finance staff",
+        "Ransomware on Meridian file servers",
+    ]
+    assert (cast.seeds[1].owner, cast.seeds[1].closer) == ("meridian-ciso", "ironclad-ir")
+    for seed in cast.seeds:
+        cast.by_slug(seed.owner), cast.by_slug(seed.closer)
     provided = {a.capability for a in cast.agents}
     for agent in cast.agents:
         assert set(agent.needs) <= provided, agent.slug
 
 
-def test_cadence_follows_role(cast):
-    expected = {"investigation": (15, 20), "agenda": (50, 70), "impostor": (120, 180)}
+def test_cadence_and_sector_follow_rules(cast):
+    expected = {"investigation": (15, 20), "incident": (30, 45), "agenda": (60, 90),
+                "impostor": (120, 180)}
     for agent in cast.agents:
-        assert agent.cadence == expected[agent.role]
+        assert agent.cadence == expected[agent.role], agent.slug
+        assert agent.sector in ("member", "provider", "assurance"), agent.slug
+    assert sum(a.sector == "member" for a in cast.agents) >= 10
+    assert all(a.domain.endswith(".example") or a.domain in ("extrahop.com", "tenable.com")
+               for a in cast.agents)
 
 
 def test_agent_id():
