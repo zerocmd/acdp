@@ -80,8 +80,6 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 8px; }
 
 .drawer { display: flex; flex-direction: column; min-height: 0; height: 100%; }
 .drawer-head { display: flex; gap: 8px; align-items: center; padding: 8px; border-bottom: 1px solid var(--line); }
-.avatar { width: 28px; height: 28px; border-radius: 50%; color: #fff; display: flex;
-  align-items: center; justify-content: center; font-weight: 700; flex: none; }
 .tabs { display: flex; gap: 4px; padding: 6px 8px; border-bottom: 1px solid var(--line); }
 .tabs button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
 .drawer-body { overflow: auto; padding: 8px 12px; min-height: 0; }
@@ -115,20 +113,6 @@ code.txt { display: inline-block; margin: 1px 4px 1px 0; }
 .chip-btn.on { background: var(--panel-2); font-weight: 600; }
 .unread { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
 .feed { overflow: auto; padding: 8px; flex: 1; min-height: 0; }
-.msg { display: flex; gap: 8px; margin: 8px 0; }
-.msg.reply { margin-left: 28px; }
-.msg.rail { padding-left: 0; }
-.msg-main { min-width: 0; flex: 1; }
-.msg-head { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; font-size: 12px; }
-.bubble { background: var(--panel-2); border-radius: 10px; padding: 6px 10px; margin-top: 2px;
-  white-space: pre-wrap; word-break: break-word; }
-.bubble.failed { border: 1px dashed var(--bad); background: transparent; }
-.trust { font-size: 11px; }
-.intent-line { color: var(--search); font-size: 12px; margin-top: 2px; }
-.divider { text-align: center; color: var(--muted); font-size: 12px; margin: 8px 0; }
-.divider span { background: var(--panel); padding: 0 8px; }
-.pill-btn { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
-  border-radius: 14px; background: var(--accent); color: #fff; border-color: var(--accent); }
 .chip.task.working { background: var(--pending); color: #000; }
 .chip.task.completed { background: var(--ok); color: #fff; }
 .chip.task.rejected, .chip.task.canceled, .chip.task.failed { background: var(--bad); color: #fff; }
@@ -259,3 +243,26 @@ code.txt { display: inline-block; margin: 1px 4px 1px 0; }
 .now { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 3; animation: blink 1.5s infinite; }
 .seq-popup { position: absolute; z-index: 4; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) { .seq-line.draw, .think.live, .now { animation: none; stroke-dashoffset: 0; } }
+
+.setup { --tone: var(--muted); }
+.setup-lines { margin: 6px 0 0; padding-left: 18px; font-size: var(--fs-ui); color: var(--muted); }
+.avatar { width: calc(32px * var(--text-scale)); height: calc(32px * var(--text-scale)); border-radius: 50%; color: #fff;
+  display: flex; align-items: center; justify-content: center; font-weight: 700; flex: none; }
+.avatar.failed { border: 2px solid var(--bad); color: var(--bad); }
+.msg { display: flex; gap: 10px; margin: 12px 0; cursor: pointer; border-radius: 12px; padding: 4px; }
+.msg:hover { background: var(--panel-2); }
+.msg.reply { margin-left: 34px; }
+.msg.fresh .bubble { animation: glow 1.6s ease-out; }
+@keyframes glow { 0% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 45%, transparent); } 100% { box-shadow: 0 0 0 0 transparent; } }
+.msg-main { min-width: 0; flex: 1; }
+.msg-head { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; font-size: var(--fs-ui); }
+.bubble { font-size: var(--fs-read); line-height: 1.45; background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 12px; padding: 8px 12px; margin-top: 3px; white-space: pre-wrap; word-break: break-word; }
+.bubble.failed { border: 1.5px dashed var(--bad); background: var(--panel); }
+.msg-chips { margin-top: 4px; }
+.intent-line { color: var(--search); font-size: var(--fs-ui); margin-top: 3px; }
+.divider { text-align: center; color: var(--muted); font-size: var(--fs-ui); margin: 10px 0; }
+.divider span { background: var(--panel); padding: 0 8px; }
+.pill-btn { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); border-radius: 14px;
+  background: var(--accent); color: #fff; border-color: var(--accent); }
+@media (prefers-reduced-motion: reduce) { .msg.fresh .bubble { animation: none; } }

@@ -268,6 +268,7 @@ export function select(state, patch) {
 export function chatItems(state) {
   const { thread, allThreads, agent, range, pair } = state.selection;
   return state.messages.filter((m) => {
+    if (m.sub === "setup") return false;
     if (range && (m.ts < range[0] || m.ts > range[1])) return false;
     if (pair) return m.kind === "message" && m.from === pair[0] && m.to === pair[1];
     if (agent) return m.kind === "message" && (m.from === agent || m.to === agent);

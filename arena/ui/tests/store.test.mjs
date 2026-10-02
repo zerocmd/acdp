@@ -195,3 +195,10 @@ test("sector, system item kinds, and focus defaults", () => {
   assert.equal(s.selection.focus, null);
   assert.equal(s.selection.hoverMessage, null);
 });
+
+test("chatItems leaves setup lines to the Setup card", () => {
+  let s = run([agent("q.x.example"), ev("agent.verified", { id: "q.x.example" }),
+    ev("thread.opened", { id: "t1", owner: "q.x.example", title: "case", color: 0 })]);
+  s = select(s, { allThreads: true });
+  assert.deepEqual(chatItems(s).map((m) => m.sub), ["thread"]);
+});
