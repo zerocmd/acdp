@@ -1,5 +1,6 @@
 // Workbench event store. Pure: no DOM, no network, no CDN imports.
 // The WebSocket feeds events into apply(); components read the state.
+import { scopeKey } from "./lib/inspect.js";
 
 export const HANDLED = [
   "bus.reset", "arena.started", "arena.idle", "arena.paused", "arena.resumed", "arena.stopped",
@@ -23,7 +24,8 @@ const LANE = {
 
 function initialSelection() {
   return { agent: null, thread: "t1", allThreads: false, range: null, view: "map",
-    tab: "overview", adding: false, allQueries: false, pair: null, focus: null, hoverMessage: null };
+    tab: "overview", adding: false, allQueries: false, pair: null, focus: null, hoverMessage: null,
+    inspect: null, history: [] };
 }
 
 export function initialState() {
@@ -263,14 +265,33 @@ export function apply(state, event) {
   return state;
 }
 
+const HISTORY = 10;
+
 export function select(state, patch) {
-  state.selection = { ...state.selection, ...patch };
-  if (patch.pair === undefined && ("agent" in patch || "thread" in patch || "allThreads" in patch)) {
+  const p = { ...patch };
+  if ("agent" in p && !("inspect" in p)) p.inspect = p.agent ? { kind: "agent", id: p.agent } : null;
+  if ("inspect" in p) {
+    const current = state.selection.inspect;
+    if (!p.inspect) p.history = [];
+    else if (!p.back && current && scopeKey(current) !== scopeKey(p.inspect)) {
+      p.history = [...state.selection.history, current].slice(-HISTORY);
+    }
+    p.agent = p.inspect?.kind === "agent" ? p.inspect.id : null;
+  }
+  delete p.back;
+  state.selection = { ...state.selection, ...p };
+  if (patch.pair === undefined && ("agent" in p || "thread" in patch || "allThreads" in patch)) {
     state.selection.pair = null;
   }
   if (patch.thread && state.threads[patch.thread]) state.threads[patch.thread].unread = 0;
   if (patch.allThreads) for (const t of Object.values(state.threads)) t.unread = 0;
   return state;
+}
+
+export function back(state) {
+  const history = state.selection.history;
+  if (!history.length) return state;
+  return select(state, { inspect: history[history.length - 1], history: history.slice(0, -1), back: true });
 }
 
 export function chatItems(state) {
@@ -317,6 +338,7 @@ export function createStore() {
       notify();
     },
     select(patch) { state = select(state, patch); notify(); },
+    back() { state = back(state); notify(); },
     setMode(mode) { state.mode = mode; notify(); },
     subscribe(fn) { subscribers.add(fn); return () => subscribers.delete(fn); },
   };

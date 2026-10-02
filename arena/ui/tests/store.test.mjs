@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { apply, chatItems, createStore, HANDLED, initialState, liveDataAvailable, select } from "../store.js";
+import { apply, back, chatItems, createStore, HANDLED, initialState, liveDataAvailable, select } from "../store.js";
 
 let seq = 0;
 const ev = (type, data, ts = 1000 + seq) => ({ seq: seq++, ts, run_id: "r", type, data });
@@ -226,4 +226,38 @@ test("history does not animate: animateAfter waits for ws.synced", () => {
 test("a bus.reset inside the history keeps animation off until sync", () => {
   const s = run([ev("bus.reset", { log: "demo" }), agent("r.x.example")]);
   assert.equal(s.animateAfter, Infinity);
+});
+
+test("agent writes map to inspect, and inspect keeps selection.agent in step", () => {
+  let s = run([agent("a.x.example"), agent("b.y.example")]);
+  s = select(s, { agent: "a.x.example", tab: "overview" });
+  assert.deepEqual(s.selection.inspect, { kind: "agent", id: "a.x.example" });
+  s = select(s, { inspect: { kind: "org", domain: "y.example" } });
+  assert.equal(s.selection.agent, null);
+  s = select(s, { inspect: { kind: "agent", id: "b.y.example" } });
+  assert.equal(s.selection.agent, "b.y.example");
+  s = select(s, { agent: null });
+  assert.deepEqual([s.selection.inspect, s.selection.history], [null, []]);
+});
+
+test("Inspector history keeps 10 entries and Back walks it", () => {
+  let s = run([agent("a.x.example")]);
+  for (let i = 0; i < 12; i += 1) s = select(s, { inspect: { kind: "thread", id: `t${i}` } });
+  assert.equal(s.selection.history.length, 10);
+  assert.equal(s.selection.history[0].id, "t1");
+  s = select(s, { inspect: { kind: "thread", id: "t11" } });
+  assert.equal(s.selection.history.length, 10);
+  s = back(s);
+  assert.deepEqual(s.selection.inspect, { kind: "thread", id: "t10" });
+  assert.equal(s.selection.history.length, 9);
+  const empty = back(select(run([]), { inspect: null }));
+  assert.equal(empty.selection.inspect, null);
+});
+
+test("bus.reset clears the Inspector and its history", () => {
+  let s = run([agent("a.x.example")]);
+  s = select(s, { inspect: { kind: "org", domain: "x.example" } });
+  s = select(s, { inspect: { kind: "thread", id: "t1" } });
+  s = apply(s, ev("bus.reset", { log: "demo" }));
+  assert.deepEqual([s.selection.inspect, s.selection.history, s.selection.agent], [null, [], null]);
 });
