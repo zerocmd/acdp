@@ -160,3 +160,183 @@ export function summaryRequest(state, scope) {
     },
   };
 }
+const inRange = (state, ts) => {
+  const range = state.selection.range;
+  return !range || ts == null || (ts >= range[0] && ts <= range[1]);
+};
+
+export function orgStats(state, domain) {
+  const agents = Object.values(state.agents).filter((a) => a.domain === domain);
+  const ids = new Set(agents.map((a) => a.id));
+  const ms = scopeMessages(state, { kind: "org", domain });
+  const tasks = { completed: 0, working: 0, rejected: 0 };
+  for (const t of Object.values(state.tasks)) {
+    if ((!ids.has(t.requester) && !ids.has(t.recipient)) || !inRange(state, t.created)) continue;
+    if (t.state === "completed") tasks.completed += 1;
+    else if (t.state === "working") tasks.working += 1;
+    else tasks.rejected += 1;
+  }
+  return {
+    agents,
+    organization: agents[0]?.organization || domain,
+    sector: agents[0]?.sector || "provider",
+    failed: agents.length > 0 && agents.every((a) => a.status === "failed"),
+    out: ms.filter((m) => ids.has(m.from)).length,
+    in: ms.filter((m) => ids.has(m.to)).length,
+    threadsOpened: state.threadOrder.filter((id) => ids.has(state.threads[id].owner)
+      && inRange(state, state.threads[id].opened)).length,
+    tasks,
+  };
+}
+
+export function partnerRows(state, domain) {
+  const rows = new Map();
+  const dom = (id) => domainOf(state.agents, id);
+  for (const m of scopeMessages(state, { kind: "org", domain })) {
+    const outgoing = dom(m.from) === domain;
+    const partner = outgoing ? dom(m.to) : dom(m.from);
+    if (!rows.has(partner)) {
+      rows.set(partner, { domain: partner, organization: orgName(state, partner), out: 0, in: 0,
+        threads: new Set(), last: 0, declines: 0, trustFailures: 0 });
+    }
+    const r = rows.get(partner);
+    if (outgoing) r.out += 1;
+    if (dom(m.to) === domain) r.in += 1;
+    r.threads.add(m.threadId);
+    r.last = Math.max(r.last, m.ts);
+    if (isDecline(m)) r.declines += 1;
+    if (trustFailed(m)) r.trustFailures += 1;
+  }
+  return [...rows.values()].map((r) => ({ ...r, threads: r.threads.size }))
+    .sort((x, y) => (y.out + y.in) - (x.out + x.in) || x.domain.localeCompare(y.domain));
+}
+
+export function orgTrust(state, domain) {
+  const all = Object.values(state.agents);
+  const mine = new Set(all.filter((a) => a.domain === domain).map((a) => a.id));
+  const against = [];
+  const by = [];
+  for (const a of all) {
+    for (const [sender, t] of Object.entries(a.trust)) {
+      if (t.status === "verified") continue;
+      if (mine.has(sender) && !mine.has(a.id)) against.push({ checker: a.id, sender, reason: t.reason });
+      if (mine.has(a.id)) by.push({ checker: a.id, sender, reason: t.reason });
+    }
+  }
+  const pins = all.filter((a) => mine.has(a.id)).map((a) => ({ id: a.id, status: a.status,
+    dns: a.steps.dns?.status || "—", checks: a.steps.checks?.status || "—", reasons: a.reasons }));
+  return { against, by, pins };
+}
+
+function threadRow(state, id) {
+  const t = state.threads[id];
+  const ms = state.messages.filter((m) => m.kind === "message" && m.threadId === id);
+  const participants = new Set([t.owner]);
+  for (const m of ms) { participants.add(m.from); participants.add(m.to); }
+  const verdict = ms.some((m) => m.intent === "verdict");
+  const end = t.closed ? (t.closedAt ?? ms[ms.length - 1]?.ts) : ms[ms.length - 1]?.ts;
+  return {
+    id, title: t.title, owner: t.owner, participants: [...participants], count: ms.length,
+    status: t.closed ? (verdict ? "verdict" : "closed") : "open",
+    duration: t.opened != null && end != null ? Math.max(0, Math.round(end - t.opened)) : null,
+  };
+}
+
+export function scopeThreads(state, scope) {
+  const s = normScope(scope);
+  const ids = new Set(scopeMessages(state, s).map((m) => m.threadId));
+  if (s.kind === "org") {
+    for (const id of state.threadOrder) {
+      if (domainOf(state.agents, state.threads[id].owner) === s.domain) ids.add(id);
+    }
+  }
+  return state.threadOrder.filter((id) => ids.has(id)).map((id) => threadRow(state, id));
+}
+
+export function pairStats(state, scope) {
+  const side = (id) => (scope.level === "org" ? domainOf(state.agents, id) : id);
+  const matches = (x, y) => { const [lo, hi] = sortPair(x, y); return lo === scope.a && hi === scope.b && x !== y; };
+  const messages = scopeMessages(state, scope);
+  const responses = [];
+  messages.forEach((m, i) => {
+    if (m.intent !== "request") return;
+    const back = messages.slice(i + 1).find((r) => r.threadId === m.threadId
+      && side(r.from) === side(m.to) && side(r.to) === side(m.from));
+    if (back) responses.push({ id: m.id, seconds: Math.round(back.ts - m.ts) });
+  });
+  const secs = responses.map((r) => r.seconds).sort((x, y) => x - y);
+  const checks = [];
+  const finds = [];
+  for (const a of Object.values(state.agents)) {
+    for (const [sender, t] of Object.entries(a.trust)) {
+      if (matches(side(a.id), side(sender))) checks.push({ checker: a.id, sender, status: t.status, reason: t.reason });
+    }
+    for (const q of a.queries) {
+      if (!inRange(state, q.ts)) continue;
+      for (const r of q.results) {
+        if (matches(side(a.id), side(r.id))) finds.push({ agent: a.id, found: r.id, capability: q.capability, ts: q.ts, new: r.new });
+      }
+    }
+  }
+  return {
+    messages,
+    threads: [...new Set(messages.map((m) => m.threadId))],
+    responses,
+    median: secs.length ? secs[Math.floor((secs.length - 1) / 2)] : null,
+    slowest: secs.length ? secs[secs.length - 1] : null,
+    declines: messages.filter(isDecline).length,
+    trustFailures: messages.filter(trustFailed).length,
+    tasks: Object.values(state.tasks).filter((t) => inRange(state, t.created)
+      && inScope(scope, { from: t.requester, to: t.recipient, threadId: t.threadId }, state.agents)),
+    checks,
+    finds,
+  };
+}
+
+export function threadStory(state, id) {
+  const t = state.threads[id];
+  if (!t) return [];
+  const ms = state.messages.filter((m) => m.kind === "message" && m.threadId === id);
+  const start = t.opened ?? ms[0]?.ts ?? 0;
+  const end = t.closedAt ?? Infinity;
+  const steps = [{ kind: "opened", ts: start, agent: t.owner, text: t.title }];
+  const members = new Set([t.owner, ...ms.flatMap((m) => [m.from, m.to])]);
+  for (const aid of members) {
+    for (const q of state.agents[aid]?.queries || []) {
+      if (q.ts < start || q.ts > end) continue;
+      const asked = q.results.filter((r) => ms.some((m) => m.from === aid && m.to === r.id && m.ts >= q.ts));
+      if (!asked.length) continue;
+      steps.push({ kind: "search", ts: q.ts, agent: aid,
+        text: `searched ${q.capability}: found ${asked.map((r) => agentName(state, r.id)).join(", ")}` });
+    }
+  }
+  for (const m of ms) {
+    steps.push({ kind: "message", ts: m.ts, agent: m.from, to: m.to, intent: m.intent, id: m.id,
+      text: m.body.slice(0, 160), lookingFor: m.lookingFor, whyThisPeer: m.whyThisPeer, failed: trustFailed(m) });
+  }
+  if (t.closed) {
+    const verdict = [...ms].reverse().find((m) => m.intent === "verdict");
+    steps.push({ kind: "closed", ts: t.closedAt ?? ms[ms.length - 1]?.ts ?? start, agent: verdict?.from || t.owner,
+      text: verdict ? verdict.body.slice(0, 160) : `closed (${t.reason || "no reason"})` });
+  }
+  const order = { opened: 0, search: 1, message: 1, closed: 2 };
+  return steps.map((x, i) => ({ ...x, i }))
+    .sort((x, y) => order[x.kind] - order[y.kind] || x.ts - y.ts || x.i - y.i)
+    .map(({ i, ...x }) => x);
+}
+
+export function threadParticipants(state, id) {
+  const t = state.threads[id];
+  if (!t) return [];
+  const rows = new Map();
+  const add = (aid, by) => { if (!rows.has(aid)) rows.set(aid, { id: aid, broughtBy: by, sent: 0, received: 0 }); };
+  add(t.owner, null);
+  for (const m of state.messages) {
+    if (m.kind !== "message" || m.threadId !== id) continue;
+    add(m.from, null);
+    add(m.to, m.from);
+    rows.get(m.from).sent += 1;
+    rows.get(m.to).received += 1;
+  }
+  return [...rows.values()];
+}

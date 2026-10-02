@@ -1,8 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { apply, initialState } from "../store.js";
-import { inScope, normScope, pairScope, scopeAgents, scopeKey, scopeLabel, scopeMessages,
-  summarize, summaryRequest, switchPairLevel } from "../lib/inspect.js";
+import { inScope, normScope, orgStats, orgTrust, pairScope, pairStats, partnerRows, scopeAgents,
+  scopeKey, scopeLabel, scopeMessages, scopeThreads, summarize, summaryRequest, switchPairLevel,
+  threadParticipants, threadStory } from "../lib/inspect.js";
 
 let seq = 0;
 const ev = (type, data, ts) => ({ seq: seq++, ts, run_id: "r", type, data });
@@ -133,4 +134,71 @@ test("summaryRequest caps messages and truncates bodies", () => {
   assert.deepEqual(Object.keys(body.messages[0]).sort(), ["body", "from_name", "from_org", "intent", "to_name", "trust", "ts"]);
   assert.equal(body.messages[2].trust, "failed");
   assert.equal(body.facts.flags, "trust-failure, impostor-contact");
+});
+
+test("orgStats and partnerRows for a member bank", () => {
+  const s = scenario();
+  const stats = orgStats(s, "n.example");
+  assert.deepEqual([stats.organization, stats.sector, stats.failed, stats.out, stats.in, stats.threadsOpened],
+    ["Northgate", "member", false, 2, 3, 1]);
+  assert.deepEqual(stats.tasks, { completed: 1, working: 0, rejected: 0 });
+  assert.equal(orgStats(s, "h1.example").failed, true);
+  assert.deepEqual(partnerRows(s, "n.example").map((r) => [r.domain, r.out, r.in, r.threads, r.last, r.declines, r.trustFailures]), [
+    ["h.example", 1, 1, 1, 110, 0, 0],
+    ["h1.example", 1, 1, 1, 125, 1, 1],
+    ["i.example", 0, 1, 1, 140, 0, 0],
+  ]);
+});
+
+test("orgTrust lists failed checks both ways", () => {
+  const s = scenario();
+  const mine = orgTrust(s, "n.example");
+  assert.deepEqual(mine.by, [{ checker: SOC, sender: FAKE, reason: "domain mismatch" }]);
+  assert.deepEqual(mine.against, []);
+  assert.deepEqual(mine.pins.map((p) => [p.id, p.status]), [[SOC, "verified"]]);
+  assert.equal(orgTrust(s, "h1.example").against.length, 1);
+});
+
+test("scopeThreads rows with status and duration", () => {
+  const s = scenario();
+  assert.deepEqual(scopeThreads(s, { kind: "org", domain: "n.example" }), [{
+    id: "t1", title: "Phishing", owner: SOC, participants: [SOC, INTEL, FAKE, ISAC], count: 5,
+    status: "verdict", duration: 41,
+  }]);
+  const intel = scopeThreads(s, { kind: "org", domain: "h.example" });
+  assert.deepEqual(intel.map((t) => [t.id, t.status, t.duration]), [["t1", "verdict", 41], ["t2", "open", 1]]);
+});
+
+test("pairStats: response time, tasks, trust checks, and discovery finds", () => {
+  const s = scenario();
+  const p = pairStats(s, pairScope(SOC, INTEL));
+  assert.deepEqual(p.messages.map((m) => m.id), ["m1", "m2"]);
+  assert.deepEqual([p.threads, p.responses, p.median, p.slowest], [["t1"], [{ id: "m1", seconds: 8 }], 8, 8]);
+  assert.deepEqual(p.tasks.map((t) => [t.id, t.state]), [["k1", "completed"]]);
+  assert.deepEqual(p.checks, [{ checker: SOC, sender: INTEL, status: "verified", reason: "" }]);
+  assert.deepEqual(p.finds, [{ agent: SOC, found: INTEL, capability: "threat-intel", ts: 101, new: true }]);
+  const org = pairStats(s, pairScope("n.example", "h.example", "org"));
+  assert.deepEqual([org.median, org.checks.length, org.finds.length], [8, 1, 1]);
+  const fake = pairStats(s, pairScope(SOC, FAKE));
+  assert.deepEqual([fake.declines, fake.trustFailures, fake.median], [1, 1, null]);
+});
+
+test("threadStory orders the steps and marks trust failures", () => {
+  const s = scenario();
+  const story = threadStory(s, "t1");
+  assert.deepEqual(story.map((x) => x.kind),
+    ["opened", "search", "message", "message", "message", "message", "message", "closed"]);
+  assert.equal(story[1].text, "searched threat-intel: found Intel");
+  assert.deepEqual(story.filter((x) => x.failed).map((x) => x.id), ["m3"]);
+  assert.equal(story[7].text, "InvoiceDrop phishing. Revoke tokens.");
+  assert.deepEqual(threadStory(s, "t9"), []);
+});
+
+test("threadParticipants: who brought each agent in", () => {
+  assert.deepEqual(threadParticipants(scenario(), "t1"), [
+    { id: SOC, broughtBy: null, sent: 2, received: 3 },
+    { id: INTEL, broughtBy: SOC, sent: 1, received: 1 },
+    { id: FAKE, broughtBy: null, sent: 1, received: 1 },
+    { id: ISAC, broughtBy: null, sent: 1, received: 0 },
+  ]);
 });
