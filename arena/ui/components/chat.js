@@ -31,6 +31,7 @@ function Chips({ store, state }) {
       return html`<button key=${id} class=${`chip-btn${on ? " on" : ""}`} style=${`--tc:${threadColor(t.color)}`}
         onClick=${() => store.select({ thread: id, allThreads: false, agent: null, focus: id })}>
         ${id} ${t.title.slice(0, 26)} · ${t.count}${t.closed ? " ✓" : ""}${t.unread ? html` <span class="unread"></span>` : null}
+        <span class="chip-info" title="Inspect thread" onClick=${(e) => { e.stopPropagation(); store.select({ inspect: { kind: "thread", id } }); }}>ⓘ</span>
       </button>`;
     })}
     <button class=${`chip-btn${allThreads ? " on" : ""}`}

@@ -1,5 +1,6 @@
 // Workbench event store. Pure: no DOM, no network, no CDN imports.
 // The WebSocket feeds events into apply(); components read the state.
+import { scopeKey } from "./lib/inspect.js";
 
 export const HANDLED = [
   "bus.reset", "arena.started", "arena.idle", "arena.paused", "arena.resumed", "arena.stopped",
@@ -23,13 +24,14 @@ const LANE = {
 
 function initialSelection() {
   return { agent: null, thread: "t1", allThreads: false, range: null, view: "map",
-    tab: "overview", adding: false, allQueries: false, pair: null, focus: null, hoverMessage: null };
+    tab: "overview", adding: false, allQueries: false, pair: null, focus: null, hoverMessage: null,
+    inspect: null, history: [] };
 }
 
 export function initialState() {
   return {
     mode: "connecting", runId: "", log: "", stopReason: "", paused: false, generation: 0,
-    lastSeq: -1, unknown: 0, animateAfter: Infinity,
+    lastSeq: -1, lastTs: 0, unknown: 0, animateAfter: Infinity,
     agents: {}, order: [], threads: {}, threadOrder: [], messages: [],
     trustByMessage: {}, tasks: {}, taskByMessage: {}, timeline: [],
     highlight: null, lastQuery: null, selection: initialSelection(),
@@ -125,6 +127,7 @@ export function apply(state, event) {
     if (seq <= state.lastSeq) return state;
     state.lastSeq = seq;
   }
+  if (typeof ts === "number" && ts > state.lastTs) state.lastTs = ts;
   if (!HANDLED.includes(type)) {
     state.unknown += 1;
     return state;
@@ -208,12 +211,12 @@ export function apply(state, event) {
     case "decision.rejected": break;
     case "thread.opened":
       state.threads[d.id] = { id: d.id, owner: d.owner, title: d.title, color: d.color,
-        closed: false, reason: "", count: 0, unread: 0 };
+        closed: false, reason: "", count: 0, unread: 0, opened: ts, closedAt: null };
       state.threadOrder.push(d.id);
       system(state, event, `Thread ${d.id} opened: ${d.title}`, d.id, "thread");
       break;
     case "thread.closed":
-      if (state.threads[d.id]) Object.assign(state.threads[d.id], { closed: true, reason: d.reason });
+      if (state.threads[d.id]) Object.assign(state.threads[d.id], { closed: true, reason: d.reason, closedAt: ts });
       system(state, event, `Thread ${d.id} closed (${d.reason})`, d.id, "thread");
       break;
     case "verification.peer_check": {
@@ -250,26 +253,45 @@ export function apply(state, event) {
     case "task.created":
       state.tasks[d.task_id] = { id: d.task_id, requester: d.requester, recipient: d.recipient,
         messageId: d.message_id, threadId: d.thread_id, state: "working", artifact: "", reason: "",
-        replyId: "" };
+        replyId: "", created: ts, updated: ts };
       state.taskByMessage[d.message_id] = d.task_id;
       break;
     case "task.updated":
       if (state.tasks[d.task_id]) Object.assign(state.tasks[d.task_id], {
-        state: d.state, artifact: d.artifact || "", reason: d.reason || "", replyId: d.reply_id || "" });
+        state: d.state, artifact: d.artifact || "", reason: d.reason || "", replyId: d.reply_id || "", updated: ts });
       break;
     default: break;
   }
   return state;
 }
 
+const HISTORY = 10;
+
 export function select(state, patch) {
-  state.selection = { ...state.selection, ...patch };
-  if (patch.pair === undefined && ("agent" in patch || "thread" in patch || "allThreads" in patch)) {
+  const p = { ...patch };
+  if ("agent" in p && !("inspect" in p)) p.inspect = p.agent ? { kind: "agent", id: p.agent } : null;
+  if ("inspect" in p) {
+    const current = state.selection.inspect;
+    if (!p.inspect) p.history = [];
+    else if (!p.back && current && scopeKey(current) !== scopeKey(p.inspect)) {
+      p.history = [...state.selection.history, current].slice(-HISTORY);
+    }
+    p.agent = p.inspect?.kind === "agent" ? p.inspect.id : null;
+  }
+  delete p.back;
+  state.selection = { ...state.selection, ...p };
+  if (patch.pair === undefined && ("agent" in p || "thread" in patch || "allThreads" in patch)) {
     state.selection.pair = null;
   }
   if (patch.thread && state.threads[patch.thread]) state.threads[patch.thread].unread = 0;
   if (patch.allThreads) for (const t of Object.values(state.threads)) t.unread = 0;
   return state;
+}
+
+export function back(state) {
+  const history = state.selection.history;
+  if (!history.length) return state;
+  return select(state, { inspect: history[history.length - 1], history: history.slice(0, -1), back: true });
 }
 
 export function chatItems(state) {
@@ -316,6 +338,7 @@ export function createStore() {
       notify();
     },
     select(patch) { state = select(state, patch); notify(); },
+    back() { state = back(state); notify(); },
     setMode(mode) { state.mode = mode; notify(); },
     subscribe(fn) { subscribers.add(fn); return () => subscribers.delete(fn); },
   };

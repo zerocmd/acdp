@@ -5,6 +5,7 @@ import { agentsByCompany } from "../store.js";
 import { companyColor, threadColor } from "../palette.js";
 import { arrowWidth, layoutRows, visibleLanes, yAtTime } from "../lib/sequence.js";
 import { PopupCard } from "../components/popup.js";
+import { inScope, normScope, scopeLabel } from "../lib/inspect.js";
 
 const LANE_W = 150;
 const TOP = 16;
@@ -20,11 +21,12 @@ export function SequenceView({ store, state }) {
   const [follow, setFollow] = useState(true);
   const [showAll, setShowAll] = useState(false);
   const [hover, setHover] = useState(null);
-  const { focus, range } = state.selection;
+  const { range } = state.selection;
+  const focus = normScope(state.selection.focus);
   const messages = state.messages.filter((m) => m.kind === "message"
-    && (!focus || m.threadId === focus) && (!range || (m.ts >= range[0] && m.ts <= range[1])));
+    && (!focus || inScope(focus, m, state.agents)) && (!range || (m.ts >= range[0] && m.ts <= range[1])));
   const allIds = agentsByCompany(state).flatMap((g) => g.agents.map((a) => a.id));
-  const ids = visibleLanes(allIds, messages, { focus, range, showAll });
+  const ids = visibleLanes(allIds, messages, { showAll });
   const laneX = new Map(ids.map((id, i) => [id, LEFT + i * LANE_W + LANE_W / 2]));
   const first = messages[0]?.ts ?? 0;
   const last = messages[messages.length - 1]?.ts ?? 0;
@@ -46,7 +48,7 @@ export function SequenceView({ store, state }) {
   };
   return html`<div class="seq-wrap">
     <div class="seq-tools">
-      ${focus ? html`<button class="pill" style="--tone:var(--accent)" onClick=${() => store.select({ focus: null })}>Focus: ${focus} ×</button>` : null}
+      ${focus ? html`<button class="pill" style="--tone:var(--accent)" onClick=${() => store.select({ focus: null })}>Focus: ${scopeLabel(state, focus).slice(0, 40)} ×</button>` : null}
       <label><input type="checkbox" checked=${showAll} onChange=${(e) => setShowAll(e.target.checked)} /> Show all lanes</label>
       <span class="muted">${ids.length} of ${allIds.length} lanes</span>
     </div>

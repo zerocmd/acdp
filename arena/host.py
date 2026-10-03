@@ -25,6 +25,7 @@ from arena.rate import RunGuard, TokenBucket
 from arena.threads import ThreadRegistry
 from arena.transport import A2ASender
 from arena.verify import Verifier
+from arena.summarize import Summarizer
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +50,7 @@ class Settings:
     thread_cap: int = 12
     runs_dir: Path = field(default_factory=lambda: Path("runs"))
     guard_interval: float = 5.0
+    max_summaries: int = 50
 
     @classmethod
     def from_env(cls, env: Mapping[str, str]) -> "Settings":
@@ -60,6 +62,7 @@ class Settings:
             max_calls=int(env.get("ARENA_MAX_MODEL_CALLS", "2000")),
             rate_per_min=float(env.get("ARENA_RATE_PER_MIN", "40")),
             runs_dir=Path(env.get("ARENA_RUNS_DIR", "runs")),
+            max_summaries=int(env.get("ARENA_MAX_SUMMARIES", "50")),
         )
 
 
@@ -89,6 +92,7 @@ class Arena:
         self.settings = settings
         self.http_factory = http_factory
         self.model_factory = model_factory
+        self.summarizer = Summarizer(model_factory, settings.max_summaries)
         self.app = FastAPI(title="ACDP Agent Arena")
         self.agents: Dict[str, ArenaAgent] = {}
         self.tasks: Dict[str, asyncio.Task] = {}

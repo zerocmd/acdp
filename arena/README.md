@@ -87,7 +87,7 @@ Open <http://localhost:8080>. The Workbench has five areas:
 | Sidebar (left) | The agents, grouped by company, with a status dot (green verified, amber pending, red failed) and a model badge (`S` Sonnet, `H` Haiku). Below it, a registry summary. Click an agent to open its details. |
 | View area (center) | Five views: Comms Map (the default), Chord, Sequence, Matrix, and Registry. Switch between them with the buttons above the area. |
 | Timeline (below the view) | Four lanes: Register, Discover, Verify, and Message. Each dot is one event. Hover a dot for a summary. Click it to open the agent. Drag across the strip to set a time range; the views and the chat then show only that range. |
-| Right column | The chat, or the agent drawer when an agent is selected. |
+| Right column | The chat, or the Inspector when an agent, organization, pair, or thread is selected. |
 
 Press Esc to clear the selection and the time range.
 
@@ -98,7 +98,7 @@ Press Esc to clear the selection and the time range.
 | Comms Map | Who talks to whom, and the traffic as it happens. Organizations are boxes in three bands: Members (banks and credit unions), Providers (vendors), and Assurance (the ISAC, auditors, and insurers). Agents sit in their organization's box; positions do not move during a run. One ribbon joins each pair of agents on each thread. A ribbon gets wider as the pair sends more messages, and its badge shows the count (×N). Red dashed ribbons carry declines and challenges. Impostor organizations have dashed red boxes. Zoom with the mouse wheel, drag the background to pan, and click **Fit** to reset. Click a ribbon to focus its thread; everything else dims. Click the focus chip to clear it. |
 | Chord | The same traffic as a ring. Each organization is an arc; the arc length follows its agent count. Each ribbon is a chord across the ring. Focus and hover work as on the Comms Map. |
 | Sequence | The order of events in real time. One lane per agent; time flows down, with a clock on the left. Gaps longer than 20 seconds collapse into a "⋯ N s" spacer. Arrow width shows message size. Purple bars left of a lane show when the agent was thinking; dots right of it show each decision's outcome (blue sent, grey wait, amber rejected, red error). Purple diamonds are discovery searches; green diamonds are verification checks. Brackets show A2A tasks. Only lanes with activity show; select **Show all lanes** to see every agent. Hover an arrow to see the message; click it to focus its thread. |
-| Matrix | Senders (rows) by recipients (columns). Darker cells mean more messages. A red border means the recipient's trust check failed. When a thread is in focus, the counts show only that thread. The selected agent's row and column are outlined, and a cell flashes when a new message arrives. Click a cell to show only that pair in the chat. |
+| Matrix | Senders (rows) by recipients (columns). Darker cells mean more messages. A red border means the recipient's trust check failed. When a thread is in focus, the counts show only that thread. The selected agent's row and column are outlined, and a cell flashes when a new message arrives. Click a cell to open that pair in the Inspector. |
 | Registry | The registry's entries. Search and filter by status. Expand a row to see each verification check, the stored entry, and the stored card next to the live card. The **Organizations** tab shows which domain anchors each organization name. |
 
 ### Animations
@@ -123,6 +123,25 @@ Click **A−** or **A+** in the top bar to change the size of all text, from 85%
 ### Chat
 
 The chat shows one thread at a time. Pick a thread with the chips at the top, or click **All threads** to see every message in time order. A Setup card at the top counts the agents that joined, passed, and failed verification; click **show details** to see each step. Each message shows the sender, company, domain, recipient, intent, and the recipient's trust check. A purple line shows what the sender was looking for and why it picked this peer. A message that failed the trust check has a dashed red border. A request shows the state of its A2A task: `working`, `completed`, `rejected`, or `canceled`. New messages glow for a moment. Hover a message to highlight its ribbon on the Comms Map. Click a message to focus its thread on the Comms Map, the Sequence view, and the Matrix.
+
+### Inspector
+
+The Inspector replaces the chat in the right column. It shows one of four kinds:
+
+| Kind | How to open it | What it shows |
+| --- | --- | --- |
+| Agent | Click an agent node, a sidebar agent, a Matrix row label, or a Sequence lane header. | The agent drawer: Overview, Card, Prompts, Activity, Discovery. |
+| Organization | Click an organization box on the Comms Map (without dragging), a company header in the sidebar, or an arc on the Chord view. | **Overview**: sector, domain, registry status, agents, message and task totals. **Partners**: one row per partner organization with messages each way, threads, last activity, declines, and trust failures; click a header to sort and a row to open that organization pair. **Threads**: every thread its agents joined. **Trust**: failed checks on and by its agents, and DNS and key-pin state. |
+| Pair | Click a ribbon or a ×N badge on the Comms Map, a Matrix cell, or a chord. | **Conversation**: all messages between the two sides, grouped by thread. **Timeline**: a two-lane strip and the response time of each request, with the median and the slowest. **Trust & tasks**: A2A tasks, trust checks, and the discovery searches where one side found the other. Use **Agents** / **Organizations** in the header to switch between the agent pair and the organization pair. |
+| Thread | Click ⓘ on a thread chip in the chat, or a thread row in any Inspector panel. | **Story**: the steps in order (opened, the search that led to each first contact, each message, trust failures in red, closed). **Participants**: who brought each agent in. **Messages**: raw fields, and **Export JSON** to copy the thread. |
+
+Every Inspector except the agent kind starts with a **Summary** card: a headline, the opening request, the latest message, the outcome, and flags (trust failure, task rejected or canceled, impostor contact, unanswered request). The arena builds this summary from events, so it works in replays and needs no API key.
+
+When the arena has model credentials, the card also shows **Summarize with Haiku**. One click sends up to the last 80 messages in the scope to Haiku and shows a 3 to 5 sentence summary. Each click is one Haiku call. Summaries have their own limit (`ARENA_MAX_SUMMARIES`, default 50 per arena process) and do not count against `ARENA_MAX_MODEL_CALLS`, so they also work after a run stops and during a replay.
+
+Names in a panel are links. **←** returns through the last 10 Inspector entries. **Focus on map** dims everything outside the organization, pair, or thread on the Comms Map, the Sequence view, and the Matrix. Press Esc or × to close the Inspector. A new replay closes it.
+
+The Comms Map highlights the inspected scope: the organization box gets a thick outline, and the pair's or thread's ribbons glow.
 
 ### Agent drawer
 
@@ -335,6 +354,7 @@ The script reads the newest run log and checks three things: messages on thread 
 | `ARENA_MAX_MINUTES` | `20` | Time limit for a run. |
 | `ARENA_MAX_MODEL_CALLS` | `2000` | Limit on model decisions for a run. |
 | `ARENA_RATE_PER_MIN` | `40` | Limit on messages per minute across all agents. |
+| `ARENA_MAX_SUMMARIES` | `50` | Limit on Haiku summaries from the Inspector for each arena process. Summaries do not count against `ARENA_MAX_MODEL_CALLS`. |
 | `REGISTRY_CARD_HOSTS` | `arena` | Hosts that the registry can fetch Agent Cards from. Compose sets it. |
 
 ## Troubleshooting

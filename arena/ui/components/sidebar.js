@@ -9,7 +9,8 @@ export function Sidebar({ store, state }) {
   return html`<nav class="sidebar">
     <h3>Agents</h3>
     ${agentsByCompany(state).map((group) => html`<div class="company">
-      <div class="company-name" style=${`border-color:${companyColor(group.domain)}`}>
+      <div class="company-name" role="button" tabindex="0" style=${`border-color:${companyColor(group.domain)}`}
+        onClick=${() => store.select({ inspect: { kind: "org", domain: group.domain } })}>
         ${group.organization}<div class="muted">${group.domain}</div>
       </div>
       ${group.agents.map((a) => html`<button
