@@ -359,3 +359,10 @@ export function threadParticipants(state, id) {
   }
   return [...rows.values()];
 }
+
+// Cache key for a Haiku summary: the run (store generation), the scope, and the
+// time range. A new replay or a new range never shows an older summary.
+export function summaryCacheKey(state, scope) {
+  const range = state.selection.range;
+  return `${state.generation}|${scopeKey(scope)}|${range ? range.join("-") : ""}`;
+}

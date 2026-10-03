@@ -3,7 +3,7 @@
 // summary is one click away.
 import { html, useEffect, useState } from "../preact.js";
 import { getJson, postJson } from "../api.js";
-import { scopeKey, scopeLabel, summarize, summaryRequest, switchPairLevel } from "../lib/inspect.js";
+import { scopeKey, scopeLabel, summarize, summaryCacheKey, summaryRequest, switchPairLevel } from "../lib/inspect.js";
 import { Chip, Section } from "./cards.js";
 import { Drawer } from "./drawer.js";
 import { OrgPanel } from "./inspect-org.js";
@@ -16,7 +16,7 @@ const FLAG_LABEL = { "trust-failure": "trust failure", "task-rejected": "task re
   "task-canceled": "task canceled", "impostor-contact": "impostor contact", unanswered: "unanswered request" };
 
 let modelAvailable = null; // /arena/status for this page load
-const summaries = new Map(); // scopeKey -> {summary, at, count, lastSeq}
+const summaries = new Map(); // summaryCacheKey -> {summary, at, count, lastSeq}
 
 function useModelAvailable() {
   const [ok, setOk] = useState(modelAvailable);
@@ -31,7 +31,7 @@ function useModelAvailable() {
 
 function SummaryCard({ state, scope }) {
   const free = summarize(state, scope);
-  const key = scopeKey(scope);
+  const key = summaryCacheKey(state, scope);
   const available = useModelAvailable();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");

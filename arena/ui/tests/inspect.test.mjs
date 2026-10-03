@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { apply, initialState } from "../store.js";
-import { agentLabel, inScope, normScope, orgStats, orgTrust, pairScope, pairStats, partnerRows, scopeAgents,
+import { agentLabel, summaryCacheKey, inScope, normScope, orgStats, orgTrust, pairScope, pairStats, partnerRows, scopeAgents,
   scopeKey, scopeLabel, scopeMessages, scopeThreads, summarize, summaryRequest, switchPairLevel,
   threadParticipants, threadStory } from "../lib/inspect.js";
 
@@ -225,4 +225,14 @@ test("agentLabel adds the domain when two agents share a name", () => {
   assert.equal(agentLabel(s, INTEL), "Intel (h.example)");
   assert.equal(agentLabel(s, SOC), "SOC");
   assert.equal(agentLabel(s, "gone.x.example"), "gone.x.example");
+});
+
+test("summaryCacheKey changes with the run and the time range", () => {
+  const s = scenario();
+  const first = summaryCacheKey(s, "t1");
+  s.generation += 1;
+  assert.notEqual(summaryCacheKey(s, "t1"), first);
+  const second = summaryCacheKey(s, "t1");
+  s.selection.range = [100, 120];
+  assert.notEqual(summaryCacheKey(s, "t1"), second);
 });

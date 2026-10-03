@@ -5,12 +5,12 @@ import contextlib
 import logging
 import re
 from pathlib import Path
-from typing import Annotated, Dict, List, Literal
+from typing import List, Literal
 
 from fastapi import HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from arena.acdp import AcdpError
 from arena.bus import load_log, replay
@@ -57,11 +57,22 @@ class SummaryMessage(BaseModel):
     ts: float
 
 
+class SummaryFacts(BaseModel):
+    """The free-summary fields. Unknown keys are rejected."""
+
+    model_config = ConfigDict(extra="forbid")
+    headline: str = Field(default="", max_length=MAX_BODY)
+    opening: str = Field(default="", max_length=MAX_BODY)
+    latest: str = Field(default="", max_length=MAX_BODY)
+    outcome: str = Field(default="", max_length=MAX_BODY)
+    flags: str = Field(default="", max_length=MAX_BODY)
+
+
 class SummarizeRequest(BaseModel):
     kind: Literal["org", "pair", "thread"]
     title: str = Field(min_length=1, max_length=200)
     messages: List[SummaryMessage] = Field(min_length=1, max_length=MAX_MESSAGES)
-    facts: Dict[str, Annotated[str, Field(max_length=MAX_BODY)]] = Field(default_factory=dict)
+    facts: SummaryFacts = Field(default_factory=SummaryFacts)
 
 
 class NoCacheStaticFiles(StaticFiles):
@@ -156,7 +167,7 @@ def register_routes(arena: Arena, ui_dir: Path, runs_dir: Path) -> None:
     @app.post("/arena/summarize")
     async def summarize(body: SummarizeRequest):
         prompt = build_summary_prompt(
-            body.kind, body.title, [m.model_dump() for m in body.messages], body.facts
+            body.kind, body.title, [m.model_dump() for m in body.messages], body.facts.model_dump()
         )
         try:
             text = await arena.summarizer.summarize(prompt)
